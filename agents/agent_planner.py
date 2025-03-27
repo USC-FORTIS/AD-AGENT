@@ -8,7 +8,8 @@ class AgentPlanner:
     def __init__(self, user_input):
         self.tools = user_input['algorithm']
         self.parameters = user_input['parameters']
-        self.data_path = user_input['dataset']
+        self.data_path_train = user_input['dataset_train']
+        self.data_path_test = user_input['dataset_test']
         self.documents = self.load_and_split_documents()
         self.vectorstore = self.build_vectorstore(self.documents)
 

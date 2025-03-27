@@ -1,11 +1,15 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 import re
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 import subprocess
 from openai import OpenAI
 import os
-# from agent_planner import AgentPlanner
+from config.config import Config
+os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
 
 # Initialize OpenAI LLM
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -54,8 +58,8 @@ You are an expert Python developer with deep experience in anomaly detection lib
 4. The code should:
    (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))`
    (2) Import DataLoader using following commend `from data_loader.data_loader import DataLoader`
-   (3) Initialize DataLoader using statement `dataloader = DataLoader({data_path}, store_script=True)`
-   (4) Use the statement `X_train, X_test, y_train, y_test = dataloader.load_data(True)` to generate variables X_train, X_test, y_train, y_test
+   (3) Initialize DataLoader using statement `dataloader_train = DataLoader(filepath = {data_path_train}, store_script=True, store_path = 'train_data_loader.py')` & `dataloader_test = DataLoader(filepath = {data_path_test}, store_script=True, store_path = 'test_data_loader.py')`
+   (4) Use the statement `X_train, y_train = dataloader_train.load_data(split_data=False)` & `X_test, y_test = dataloader_train.load_data(split_data=False)` to generate variables X_train, y_train, X_test, y_test; 
    (5) Initialize the specified algorithm `{algorithm}` strictly following the provided documentation and train the model with `X_train`
    (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​​to the function.
    (7) Use `.decision_scores_` on `X_train` for training outlier scores
@@ -66,7 +70,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
                      
 
 IMPORTANT: 
-- Strictly follow steps (2)-(4) to load the data from `{data_path}`.
+- Strictly follow steps (2)-(4) to load the data from `{data_path_train}`.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -148,7 +152,7 @@ class AgentInstructor:
       clean_code = re.sub(r"```", "", clean_code)
       return clean_code.strip()
 
-   def generate_code(self, algorithm, data_path="./data/glass.mat", vectorstore=None, input_parameters = {}):
+   def generate_code(self, algorithm, data_path_train="./data/glass_train.mat",data_path_test = "./data/glass_test.mat", vectorstore=None, input_parameters = {}):
       """Generates Python code for anomaly detection using PyOD, using external documentation."""
       algorithm_doc = self.query_docs(algorithm, vectorstore)
       print("\n=== Extracted Documentation ===\n")
@@ -157,7 +161,8 @@ class AgentInstructor:
       generated_code = llm.invoke(
          template.invoke({
                "algorithm": algorithm,
-               "data_path": data_path,
+               "data_path_train": data_path_train,
+               "data_path_test": data_path_test,
                "algorithm_doc": algorithm_doc,
                "parameters": str(input_parameters)
          })
@@ -223,14 +228,19 @@ class AgentInstructor:
 
 
 if __name__ == "__main__":
-    agentInstructor = AgentInstructor()
-    from agent_planner import AgentPlanner
-    agentPlanner = AgentPlanner()# if want to unit test, please import AgentPlanner
+   agentInstructor = AgentInstructor()
+   from agent_planner import AgentPlanner
+   user_input = {
+      "algorithm": ["IForest"],
+      "dataset_train": "./data/glass_train.mat",
+      "dataset_test": "./data/glass_test.mat",
+      "parameters": {
+         "contamination": 0.1
+      }
+   }
+   agentPlanner = AgentPlanner(user_input=user_input)# if want to unit test, please import AgentPlanner
+   vectorstore = agentPlanner.vectorstore
 
-    algorithm = "DevNet"
-    data_path = "./data/glass.mat"
-    vectorstore = agentPlanner.vectorstore
+   code = agentInstructor.generate_code(algorithm=agentPlanner.tools[0], data_path_train = agentPlanner.data_path_train, data_path_test=agentPlanner.data_path_test, vectorstore = vectorstore, input_parameters = agentPlanner.parameters)
 
-    code = agentInstructor.generate_code(algorithm, data_path, vectorstore)
-
-    agentInstructor.execute_generated_code(code,algorithm)
+   print(agentInstructor.execute_generated_code(code,agentPlanner.tools[0]))

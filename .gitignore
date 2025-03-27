@@ -179,4 +179,5 @@ cython_debug/
 
 # Ignore generated files
 /generated_scripts
-generated_data_loader.py
+train_data_loader.py
+test_data_loader.py

@@ -33,9 +33,9 @@ Your task is to:
                                         
    (2) Import DataLoader using following commend `from data_loader.data_loader import DataLoader`
                                         
-   (3) Initialize DataLoader using statement same to the original code`
+   (3) Initialize DataLoader using statement same to the original code
                                         
-   (4) Use the statement `X_train, X_test, y_train, y_test = dataloader.load_data(True)` to generate variables X_train, X_test, y_train, y_test
+   (4) Generate variables X_train, X_test, y_train, y_test using statement same to the original code
 
    (5) Initialize the specified algorithm `{algorithm}` strictly following the provided documentation and train the model with `X_train`.
 
