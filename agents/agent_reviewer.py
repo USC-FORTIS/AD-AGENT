@@ -39,10 +39,17 @@ Your task is to:
 
    (5) Initialize the specified algorithm `{algorithm}` strictly following the provided documentation and train the model with `X_train`.
 
-   (6) Use `.decision_scores_` on `X_train` for training outlier scores,
-       and use `.decision_function(X_test)` for test outlier scores.
-
-   (7) Use variables `detected_anomalies` and `true_anomalies` to record the number of detected and true anomalies in the test data, and print them out.
+   (6) Use `.decision_scores_` on `X_train` for training outlier scores
+       Use `.decision_function(X_test)` for test outlier scores
+       Calculate AUROC (Area Under the Receiver Operating Characteristic Curve) and AUPRC (Area Under the Precision-Recall Curve) based on given data
+   
+   (7) Using variables to record the number of detected; ture anomalies in test data; AUROC; AUPRC and print them out in following format:
+       Detected anomalies:\s*(\d+)
+       True anomalies:\s*(\d+)
+       AUROC:\s*(\d+.\d+)
+       AUPRC:\s*(\d+.\d+)
+   (8) Using variables to record prediction failed data and print these points out with true label in following format:
+       `Failed prediction at point [xx,xx,xx...] with true label xx` Use `.tolist()` to convert point to be an array.
 
 IMPORTANT:
 - Strictly follow the above steps (2)-(7) to load the data (from the same path used in the original code) and build the model.

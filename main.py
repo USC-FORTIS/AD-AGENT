@@ -239,7 +239,7 @@ async def main():
         code_quality = tool_state.get("code_quality")
         if code_quality and not code_quality.error_message:
             if code_quality.detected_anomalies >= 0:
-                print(f"[{tool}] Success, detected anomalies: {code_quality.detected_anomalies}, true anomalies: {code_quality.true_anomalies}")
+                print(f"[{tool}] Success, AUROC: {code_quality.auroc:.4f}, AUPRC: {code_quality.auprc:.4f}, Error Points: {code_quality.error_points}")
             else:
                 print(f"[{tool}] Failed, data type not suitable for {tool}")
         else:

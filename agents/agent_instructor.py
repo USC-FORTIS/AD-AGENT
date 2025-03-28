@@ -64,18 +64,26 @@ You are an expert Python developer with deep experience in anomaly detection lib
    (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​​to the function.
    (7) Use `.decision_scores_` on `X_train` for training outlier scores
        Use `.decision_function(X_test)` for test outlier scores
-   (8) Using variables to record the number of detected and ture anomalies in test data and print them out in following format:
+       Calculate AUROC (Area Under the Receiver Operating Characteristic Curve) and AUPRC (Area Under the Precision-Recall Curve) based on given data
+   (8) Using variables to record the number of detected; ture anomalies in test data; AUROC; AUPRC and print them out in following format:
        Detected anomalies:\s*(\d+)
        True anomalies:\s*(\d+)
+       AUROC:\s*(\d+.\d+)
+       AUPRC:\s*(\d+.\d+)
+   (9) Using variables to record prediction failed data and print these points out with true label in following format:
+       `Failed prediction at point [xx,xx,xx...] with true label xx` Use `.tolist()` to convert point to be an array.
                      
 
 IMPORTANT: 
-- Strictly follow steps (2)-(4) to load the data from `{data_path_train}`.
+- Strictly follow steps (2)-(4) to load the data from `{data_path_train}` & {data_path_test}.
 - Do NOT input optional or incorrect parameters.
 """)
 
-web_search_prompt_system = "You are a machine learning expert and will assist me with researching a specific use of a deep learning model in PyOD. Here is the official document you should refer to: https://pyod.readthedocs.io/en/latest/pyod.models.html"
-web_search_prompt_user = PromptTemplate.from_template("""I want to run `{algorithm_name}`. What is the Initialization function, parameters and Attributes? Please return to the document content directly.""")
+web_search_prompt = PromptTemplate.from_template("""
+   You are a machine learning expert and will assist me with researching a specific use of a deep learning model in PyOD. Here is the official document you should refer to: https://pyod.readthedocs.io/en/latest/pyod.models.html
+   I want to run `{algorithm_name}`. What is the Initialization function, parameters and Attributes? 
+   Briefly return realted document content.
+""")
 
 class AgentInstructor:
    def __init__(self):
@@ -101,50 +109,81 @@ class AgentInstructor:
          print(result.stderr)
 
          if result.returncode != 0:
-               return CodeQuality(
-                  code=code,
-                  algorithm=None,
-                  error_message= result.stderr,
-                  detected_anomalies=-1,
-                  true_anomalies=-1,
-                  review_count=0
-               )
+            return CodeQuality(
+               code=code,
+               algorithm=None,
+               error_message= result.stderr,
+               detected_anomalies=-1,
+               true_anomalies=-1,
+               auroc=-1,
+               auprc=-1,
+               error_points=[],
+               review_count=0
+            )
          else:
-               detected_anomalies, true_anomalies = self.extract_anomalies(result.stdout)
-               return CodeQuality(
-                  code=code,
-                  algorithm=None,
-                  error_message="",
-                  detected_anomalies=detected_anomalies,
-                  true_anomalies=true_anomalies,
-                  review_count=0
-               )
+            detected_anomalies, true_anomalies, auroc, auprc, error_points = self.extract_eval(result.stdout)
+            return CodeQuality(
+               code=code,
+               algorithm=None,
+               error_message="",
+               detected_anomalies=detected_anomalies,
+               true_anomalies=true_anomalies,
+               auroc=auroc,
+               auprc=auprc,
+               error_points=error_points, # list of dicts with point and true_label
+               review_count=0
+            )
       except Exception as e:
-          return CodeQuality(
+         print(str(e))
+         return CodeQuality(
             code=code,
             algorithm=None,
             error_message=str(e),
             detected_anomalies=-1,
             true_anomalies=-1,
+            auroc=-1,
+            auprc=-1,
+            error_points=[],
             review_count=0
-        )
+         )
       
-   def extract_anomalies(self,output: str):
+      
+   def extract_eval(self,output: str):
       detected_anomalies = -1
       true_anomalies = -1
+      auroc = -1
+      auprc = -1
+      error_points = []
 
       for line in output.splitlines():
          if "Detected anomalies:" in line:
-               match = re.search(r"Detected anomalies:\s*(\d+)", line)
-               if match:
-                  detected_anomalies = int(match.group(1))
+            match = re.search(r"Detected anomalies:\s*(\d+)", line)
+            if match:
+               detected_anomalies = int(match.group(1))
 
          elif "True anomalies:" in line:
-               match = re.search(r"True anomalies:\s*(\d+)", line)
-               if match:
-                  true_anomalies = int(match.group(1))
-
-      return detected_anomalies, true_anomalies
+            match = re.search(r"True anomalies:\s*(\d+)", line)
+            if match:
+               true_anomalies = int(match.group(1))
+         elif "AUROC:" in line:
+            match = re.search(r"AUROC:\s*([\d.]+)", line)
+            if match:
+               auroc = float(match.group(1))
+         elif "AUPRC:" in line:
+            match = re.search(r"AUPRC:\s*([\d.]+)", line)
+            if match:
+               auprc = float(match.group(1))
+         elif "Failed prediction at point" in line:
+            match = re.search(r"Failed prediction at point \[([^\]]+)\] with true label ([\d\.]+)\.?", line)
+            if match:
+               numbers_str = match.group(1)
+               true_label = float(match.group(2))
+               numbers = [float(num.strip()) for num in numbers_str.split(',')]
+               error_points.append({
+                     "point": numbers,
+                     "true_label": true_label
+               })
+      return detected_anomalies, true_anomalies, auroc, auprc, error_points
    
    def clean_generated_code(self, code):
       """Removes Markdown code block formatting from LLM output."""
@@ -175,55 +214,18 @@ class AgentInstructor:
       # query = f"class pyod.models.{algorithm}.{algorithm}"
       # doc_list = vectorstore.similarity_search(query, k=1)
       # algorithm_doc = "\n\n".join([doc.page_content for doc in doc_list])
+
       client = OpenAI()
-      
       response = client.responses.create(
          model="gpt-4o",
-         input=[
-            {
-               "role": "system",
-               "content": [
-               {
-                  "type": "input_text",
-                  "text": web_search_prompt_system
-               }
-               ]
-            },
-            {
-               "role": "user",
-               "content": [
-               {
-                  "type": "input_text",
-                  "text": web_search_prompt_user.invoke({"algorithm_name": algorithm}).to_string()
-               }
-               ]
-            }
-         ],
-         text={
-            "format": {
-               "type": "text"
-            }
-         },
-         reasoning={},
-         tools=[
-            {
-               "type": "web_search_preview",
-               "user_location": {
-               "type": "approximate"
-               },
-               "search_context_size": "medium"
-            }
-         ],
-         temperature=0,
-         max_output_tokens=16384,
-         top_p=1,
-         store=True
-         )
-      try:
-         algorithm_doc = response.output[1].content[0].text
-      except (IndexError, AttributeError) as error:
+         tools=[{"type": "web_search_preview"}],
+         input= web_search_prompt.invoke({"algorithm_name": algorithm}).to_string(),
+         max_output_tokens=2024
+      )
+      algorithm_doc = response.output_text
+      if not algorithm_doc:
+         print("Error in response "+ algorithm)
          print(response)
-         algorithm_doc = ""
       return algorithm_doc
 
 
