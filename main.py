@@ -29,6 +29,7 @@ class FullToolState(TypedDict):
     input_parameters: dict
     data_path_train: str
     data_path_test: str
+    package_name: str
     agent_instructor: AgentInstructor
     agent_reviewer: AgentReviewer
     vectorstore: Any
@@ -64,6 +65,7 @@ def call_planner(state: FullToolState) -> dict:
     state["input_parameters"] = planner_instance.parameters
     state["data_path_train"] = planner_instance.data_path_train
     state["data_path_test"] = planner_instance.data_path_test
+    state["package_name"] = planner_instance.package_name
     state["vectorstore"] = planner_instance.vectorstore
     print("\n=== [Planner] Idea space generation complete ===")
     return state
@@ -78,6 +80,7 @@ def call_instructor_for_single_tool(state: FullToolState) -> dict:
     input_parameters = state["input_parameters"]
     data_path_train = state["data_path_train"]
     data_path_test = state["data_path_test"]
+    package_name = state["package_name"]
 
     if not state["code_quality"]:
         print(f"\n=== [Instructor] Processing {tool} (first execution) ===")
@@ -86,7 +89,8 @@ def call_instructor_for_single_tool(state: FullToolState) -> dict:
             data_path_train=data_path_train,
             data_path_test=data_path_test,
             vectorstore=vectorstore,
-            input_parameters=input_parameters
+            input_parameters=input_parameters,
+            package_name=package_name
         )
     else:
         print(f"\n=== [Instructor] Re-executing updated code for {tool} ===")
@@ -238,10 +242,7 @@ async def main():
     for tool, tool_state in results:
         code_quality = tool_state.get("code_quality")
         if code_quality and not code_quality.error_message:
-            if code_quality.detected_anomalies >= 0:
-                print(f"[{tool}] Success, AUROC: {code_quality.auroc:.4f}, AUPRC: {code_quality.auprc:.4f}, Error Points: {code_quality.error_points}")
-            else:
-                print(f"[{tool}] Failed, data type not suitable for {tool}")
+            print(f"[{tool}] Success, AUROC: {code_quality.auroc:.4f}, AUPRC: {code_quality.auprc:.4f}, Error Points: {code_quality.error_points}")
         else:
             err_msg = code_quality.error_message if code_quality else "Unknown"
             print(f"[{tool}] Failed, error message: {err_msg}")

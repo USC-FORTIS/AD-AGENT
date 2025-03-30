@@ -66,12 +66,12 @@ class AgentPreprocessor:
                         "If user says `./data/train.mat and ./data/test.mat` you should return `{'algorithm': [], 'dataset_train': './data/train.mat', 'dataset_test': './data/test.mat', 'parameters': {}}`. "
                         "IMPORTANT: DO NOT ASSUME ALGORITHM NAME OR PARAMETERS NAME. "
                         "IMPORTANT: Algorithm should always be an array. "
-                        "IMPORTANT: IF USER WANTS TO RUN ALL ALGORITHMS, return 'algorithm' as ['ECOD', 'ABOD', 'FastABOD', 'COPOD', 'MAD', 'SOS', 'QMCD', 'KDE', 'Sampling', 'GMM', 'PCA', 'KPCA', 'MCD', 'CD', 'OCSVM', 'LMDD', 'LOF', 'COF', '(Incremental) COF', 'CBLOF', 'LOCI', 'HBOS', 'kNN', 'AvgKNN', 'MedKNN', 'SOD', 'ROD', 'IForest', 'INNE', 'DIF', 'FeatureBagging', 'LSCP', 'XGBOD', 'LODA', 'SUOD', 'AutoEncoder', 'VAE', 'Beta-VAE', 'SO_GAAL', 'MO_GAAL', 'DeepSVDD', 'AnoGAN', 'ALAD', 'AE1SVM', 'DevNet', 'R-Graph', 'LUNAR']"
+                        "IMPORTANT: IF USER WANTS TO RUN ALL ALGORITHMS, return 'algorithm' as ['all']"
                     )
+                   
                 }
             ]
             structured_response = self.get_chatgpt_response(extraction_prompt)
-            print("Structured Response:", structured_response)
 
             try:
                 # Warning: Using eval has security risks; used here for demonstration purposes only
@@ -95,7 +95,7 @@ class AgentPreprocessor:
                 print("Chatbot: Please provide a valid training dataset location.")
             if not self.experiment_config["dataset_test"] or (not os.path.exists(self.experiment_config["dataset_test"])):
                 print("Chatbot: Please provide a valid testing dataset location.")
-
+        
         print("\nExperiment Configuration:")
         print(f"Algorithm: {self.experiment_config['algorithm']}")
         print(f"Training Dataset: {self.experiment_config['dataset_train']}")

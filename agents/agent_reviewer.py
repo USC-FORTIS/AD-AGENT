@@ -26,33 +26,10 @@ Your task is to:
 1. Analyze the error message to find the cause of the error.
 2. Use the provided official documentation for `{algorithm}` to fix the code accordingly.
 3. Identify the data path from the original code (if any). If no valid data path is found, print an appropriate message.
-4. Write only **executable** Python code for anomaly detection using PyOD and do not include any explanations or descriptions.
-5. Base your new code strictly on the following steps:
-
-   (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))`
-                                        
-   (2) Import DataLoader using following commend `from data_loader.data_loader import DataLoader`
-                                        
-   (3) Initialize DataLoader using statement same to the original code
-                                        
-   (4) Generate variables X_train, X_test, y_train, y_test using statement same to the original code
-
-   (5) Initialize the specified algorithm `{algorithm}` strictly following the provided documentation and train the model with `X_train`.
-
-   (6) Use `.decision_scores_` on `X_train` for training outlier scores
-       Use `.decision_function(X_test)` for test outlier scores
-       Calculate AUROC (Area Under the Receiver Operating Characteristic Curve) and AUPRC (Area Under the Precision-Recall Curve) based on given data
-   
-   (7) Using variables to record the number of detected; ture anomalies in test data; AUROC; AUPRC and print them out in following format:
-       Detected anomalies:\s*(\d+)
-       True anomalies:\s*(\d+)
-       AUROC:\s*(\d+.\d+)
-       AUPRC:\s*(\d+.\d+)
-   (8) Using variables to record prediction failed data and print these points out with true label in following format:
-       `Failed prediction at point [xx,xx,xx...] with true label xx` Use `.tolist()` to convert point to be an array.
+4. Write only **executable** Python code for anomaly detection and do not include any explanations or descriptions.
+5. Base your new code strictly original code logic and the official documentation.
 
 IMPORTANT:
-- Strictly follow the above steps (2)-(7) to load the data (from the same path used in the original code) and build the model.
 - Do NOT input optional or incorrect parameters.
 - **In your final answer, output only the Python code.**
 """)
