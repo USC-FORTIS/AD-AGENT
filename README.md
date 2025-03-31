@@ -33,6 +33,8 @@ python -m venv .venv
 
 ```bash
 pip install -r requirements.txt
+
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.5.0+cpu.html
 ```
 
 ### 4. Set Your OpenAI API Key
@@ -70,13 +72,16 @@ You can also run the system with natural-language-like test commands.
 ### Run a Specific Algorithm
 
 ```text
-Run IForest on ./data/glass.mat with contamination=0.1
+#pyod
+Run IForest on ./data/glass_train.mat and ./data/glass_test.mat with contamination=0.1
+#pygod
+Run DOMINANT on  ./data/inj_cora_train.pt and ./data/inj_cora_test.pt
 ```
 
 ### Run All Algorithms
 
 ```text
-Run all on ./data/glass.mat
+Run all on ./data/glass_train.mat and ./data/glass_test.mat
 ```
 
 ---

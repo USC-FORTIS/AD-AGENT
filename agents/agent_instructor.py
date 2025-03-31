@@ -60,7 +60,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
 
 4. The code should:
    (1) Import sys, os, torch, and include the command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))`&`from pygod.detector import {algorithm}`
-   (2) Load training and test data using `torch.load` from the file paths `{data_path_train}` and `{data_path_test}` respectively.
+   (2) Load training and test data using `torch.load` with parameter `weights_only=False` from the file paths `{data_path_train}` and `{data_path_test}` respectively.
    (3) Convert labels in the loaded data by executing:
        `train_data.y = (train_data.y != 0).long()`
        `test_data.y = (test_data.y != 0).long()`
@@ -213,7 +213,7 @@ class AgentInstructor:
          query = f"class pyod.models.{algorithm}.{algorithm}"
       else:
          query = f"class pygod.detector.{algorithm}"
-      doc_list = vectorstore.similarity_search(query, k=1)
+      doc_list = vectorstore.similarity_search(query, k=3)
       algorithm_doc = "\n\n".join([doc.page_content for doc in doc_list])
 
       # client = OpenAI()
@@ -234,7 +234,7 @@ if __name__ == "__main__":
    agentInstructor = AgentInstructor()
    from agent_planner import AgentPlanner
    user_input = {
-      "algorithm": ["all"],
+      "algorithm": ["CARD"],
       "dataset_train": "./data/inj_cora_train.pt",
       "dataset_test": "./data/inj_cora_test.pt",
       "parameters": {}
