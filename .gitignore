@@ -181,3 +181,4 @@ cython_debug/
 /generated_scripts
 train_data_loader.py
 test_data_loader.py
+config/config.py
