@@ -102,7 +102,7 @@ class AgentInstructor:
             script_file.write(code)
       try:
          result = subprocess.run(
-               ["python", file_path],
+               ["python3", file_path],
                capture_output=True,
                text=True
          )
@@ -176,72 +176,48 @@ class AgentInstructor:
       clean_code = re.sub(r"```", "", clean_code)
       return clean_code.strip()
 
-   def generate_code(self, algorithm, data_path_train="./data/glass_train.mat",data_path_test = "./data/glass_test.mat", vectorstore=None, input_parameters = {},package_name = None):
+   def generate_code(self, algorithm, data_path_train="./data/glass_train.mat",data_path_test = "./data/glass_test.mat", vectorstore=None, input_parameters = {},package_name = None, algorithm_doc: str = None):
       """Generates Python code for anomaly detection using PyOD, using external documentation."""
-      algorithm_doc = self.query_docs(algorithm, vectorstore, package_name)
       print("\n=== Extracted Documentation ===\n")
       print(algorithm_doc)
       generated_code = ""
-      if package_name == "pyod":
-         generated_code = llm.invoke(
-            template_pyod.invoke({
-                  "algorithm": algorithm,
-                  "data_path_train": data_path_train,
-                  "data_path_test": data_path_test,
-                  "algorithm_doc": algorithm_doc,
-                  "parameters": str(input_parameters)
-            })
-         ).content
-      else:
-         generated_code = llm.invoke(
-            template_pygod.invoke({
-                  "algorithm": algorithm,
-                  "data_path_train": data_path_train,
-                  "data_path_test": data_path_test,
-                  "algorithm_doc": algorithm_doc,
-                  "parameters": str(input_parameters)
-            })
-         ).content
+      prompt_input = {
+            "algorithm": algorithm,
+            "data_path_train": data_path_train,
+            "data_path_test": data_path_test,
+            "algorithm_doc": algorithm_doc,
+            "parameters": str(input_parameters)
+        }
 
+      if package_name == "pyod":
+            generated_code = llm.invoke(template_pyod.invoke(prompt_input)).content
+      else:
+            generated_code = llm.invoke(template_pygod.invoke(prompt_input)).content
 
       return self.clean_generated_code(generated_code)
-   def query_docs(self, algorithm, vectorstore, package_name):
-      """Searches for relevant documentation based on the query."""
-      # Query using RAG
-      query = ""
-      if package_name == "pyod":
-         query = f"class pyod.models.{algorithm}.{algorithm}"
-      else:
-         query = f"class pygod.detector.{algorithm}"
-      doc_list = vectorstore.similarity_search(query, k=3)
-      algorithm_doc = "\n\n".join([doc.page_content for doc in doc_list])
-
-      # client = OpenAI()
-      # response = client.responses.create(
-      #    model="gpt-4o",
-      #    tools=[{"type": "web_search_preview"}],
-      #    input= web_search_prompt.invoke({"algorithm_name": algorithm}).to_string(),
-      #    max_output_tokens=2024
-      # )
-      # algorithm_doc = response.output_text
-      # if not algorithm_doc:
-      #    print("Error in response "+ algorithm)
-      #    print(response)
-      return algorithm_doc
+   
 
 
 if __name__ == "__main__":
    agentInstructor = AgentInstructor()
    from agent_planner import AgentPlanner
    user_input = {
-      "algorithm": ["CARD"],
-      "dataset_train": "./data/inj_cora_train.pt",
-      "dataset_test": "./data/inj_cora_test.pt",
+      "algorithm": ["IForest"],
+      "dataset_train": "./data/glass_train.mat",
+      "dataset_test": "./data/glass_test.mat",
       "parameters": {}
    }
-   agentPlanner = AgentPlanner(user_input=user_input)# if want to unit test, please import AgentPlanner
-   vectorstore = agentPlanner.vectorstore
+   agentPlanner = AgentPlanner(user_input=user_input)
+   tool_plan = agentPlanner.tool_plans[0]  # assuming single-tool for test
 
-   code = agentInstructor.generate_code(algorithm=agentPlanner.tools[0], data_path_train = agentPlanner.data_path_train, data_path_test=agentPlanner.data_path_test, vectorstore = vectorstore, input_parameters = agentPlanner.parameters, package_name = agentPlanner.package_name)
+   code = agentInstructor.generate_code(
+        algorithm=tool_plan.tool,
+        data_path_train=tool_plan.data_path_train,
+        data_path_test=tool_plan.data_path_test,
+        input_parameters=tool_plan.parameters,
+        package_name=tool_plan.package_name,
+        algorithm_doc=tool_plan.documentation
+   )
 
-   print(agentInstructor.execute_generated_code(code,agentPlanner.tools[0]))
+   result = agentInstructor.execute_generated_code(code, tool_plan.tool)
+   print(result)

@@ -35,14 +35,14 @@ IMPORTANT:
 """)
 
 class AgentReviewer:
-    def review_code(self,code_quality, vectorstore):
+    def review_code(self,code_quality, algorithm_doc):
         
         revised_code = ""
 
         if code_quality.error_message != "" and code_quality.review_count < 2:
             print(f"\n=== [Reviewer] Error detected in {code_quality.algorithm} ===")
-            algorithm_doc = self.query_docs(code_quality.algorithm, vectorstore)
             print(f"\n=== [Reviewer] Regenerate code for {code_quality.algorithm} ===\n")
+
             revised_code = llm.invoke(
                 template.invoke({
                     "code": code_quality.code,
@@ -62,12 +62,7 @@ class AgentReviewer:
 
         return revised_code
     
-    def query_docs(self, algorithm, vectorstore):
-        """Searches for relevant documentation based on the query."""
-        query = f"class pyod.models.{algorithm}.{algorithm}"
-        doc_list = vectorstore.similarity_search(query, k=5)
-        algorithm_doc = "\n\n".join([doc.page_content for doc in doc_list])
-        return algorithm_doc
+
     def clean_generated_code(self, code):
         """Removes Markdown code block formatting from LLM output."""
         clean_code = re.sub(r"```(python)?", "", code)

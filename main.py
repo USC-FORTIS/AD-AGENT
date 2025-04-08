@@ -25,14 +25,14 @@ from entity.code_quality import CodeQuality
 # =================================================================
 class FullToolState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
-    current_tool: str
-    input_parameters: dict
-    data_path_train: str
-    data_path_test: str
+    current_tool: str 
     package_name: str
     agent_instructor: AgentInstructor
     agent_reviewer: AgentReviewer
-    vectorstore: Any
+    #vectorstore: Any
+    #data_path_train: str
+    #data_path_test: str
+    #input_parameters: dict
     code_quality: CodeQuality | None
     should_rerun: bool
     agent_preprocessor: AgentPreprocessor
@@ -76,21 +76,22 @@ def call_planner(state: FullToolState) -> dict:
 def call_instructor_for_single_tool(state: FullToolState) -> dict:
     instructor = state["agent_instructor"]
     tool = state["current_tool"]
-    vectorstore = state["vectorstore"]
-    input_parameters = state["input_parameters"]
-    data_path_train = state["data_path_train"]
-    data_path_test = state["data_path_test"]
-    package_name = state["package_name"]
+    tool_plan = next(
+        (plan for plan in state["agent_planner"].tool_plans if plan.tool == tool),
+        None
+    )
+    if tool_plan is None:
+        raise ValueError(f"No ToolPlan found for tool '{tool}'")
 
     if not state["code_quality"]:
         print(f"\n=== [Instructor] Processing {tool} (first execution) ===")
         code = instructor.generate_code(
-            algorithm=tool,
-            data_path_train=data_path_train,
-            data_path_test=data_path_test,
-            vectorstore=vectorstore,
-            input_parameters=input_parameters,
-            package_name=package_name
+            algorithm=tool_plan.tool,
+            data_path_train=tool_plan.data_path_train,
+            data_path_test=tool_plan.data_path_test,
+            input_parameters=tool_plan.parameters,
+            package_name=tool_plan.package_name,
+            algorithm_doc=tool_plan.documentation
         )
     else:
         print(f"\n=== [Instructor] Re-executing updated code for {tool} ===")
@@ -110,11 +111,19 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
     tool = state["current_tool"]
 
     print(f"\n=== [Reviewer] Reviewing code for {tool} ===")
+    tool_plan = next(
+        (plan for plan in state["agent_planner"].tool_plans if plan.tool == tool),
+        None
+    )
+    if not tool_plan:
+        raise ValueError(f"No ToolPlan found for tool '{tool}'")
+    
     if code_quality.error_message:
         code_quality.review_count += 1
         revised_code = reviewer.review_code(
             code_quality=code_quality,
-            vectorstore=state["vectorstore"]
+            algorithm_doc=tool_plan.documentation 
+            #vectorstore=state["vectorstore"]
         )
         code_quality.code = revised_code
     return {"code_quality": code_quality}
