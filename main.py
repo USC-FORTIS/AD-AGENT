@@ -43,7 +43,7 @@ class FullToolState(TypedDict):
     experiment_config: dict | None
     results         : List[Tuple[str, Any]] | None
     algorithm_doc   : str | None
-    n_features     : int | None
+    feature_dim     : int | None
 
 # ------------------------------------------------------------------
 # Node: processor
@@ -72,7 +72,7 @@ def call_selector(state: FullToolState) -> dict:
         data_path_train = selector.data_path_train,
         data_path_test  = selector.data_path_test,
         package_name    = selector.package_name,
-        n_features     = selector.n_features,
+        feature_dim     = selector.feature_dim,
         # vectorstore     = selector.vectorstore
     )
     print("\n=== [Selector] Selection complete ===")
@@ -135,7 +135,7 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
         cq.code,
         tool,
         state["package_name"],
-        n_features=state.get("n_features"),
+        feature_dim=state.get("feature_dim"),
     )
 
     if cq.error_message:
@@ -307,7 +307,7 @@ async def main():
         "experiment_config": None,
         "results"         : None,
         "algorithm_doc"   : None,
-        "n_features"     : None,
+        "feature_dim"     : None,
     }
 
     print("\n=== [Main] Starting full pipeline ===")

@@ -24,9 +24,9 @@ TASK:
    with code that creates SMALL synthetic data directly in the script:
      • For PyOD: generate X_train, y_train, X_test, y_test using `generate_data`;
          `from pyod.utils.data import generate_data`
-         If {n_features} is provided (>0), set `n_features={n_features}`.
+         If {feature_dim} is provided (>0), set `n_features={feature_dim}`.
          Example:
-         `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=n_features)`
+         `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=feature_dim)`
    • For PyGOD: build train and test graph follow instruction below;
      `import torch`
      `from pygod.generator import gen_contextual_outlier, gen_structural_outlier`
@@ -107,7 +107,7 @@ class AgentReviewer:
         code: str,
         algorithm_name: str,
         package_name: str,
-        n_features: int | None = None,
+        feature_dim: int | None = None,
     ) -> str:
         """
         Generate a test script using synthetic data and execute it.
@@ -120,7 +120,7 @@ class AgentReviewer:
                     "code": code,
                     "algorithm_name": algorithm_name,
                     "package_name": package_name,
-                    "n_features": n_features
+                    "feature_dim": feature_dim
                 })
             ).content
             test_script = self._clean_markdown(test_script)

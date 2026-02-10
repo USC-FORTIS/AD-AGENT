@@ -19,7 +19,7 @@ class AgentSelector:
       self.data_path_train = user_input['dataset_train']
       self.data_path_test = user_input['dataset_test']
       self.user_input = user_input
-      self.n_features = None
+      self.feature_dim = None
       self.algorithm = None
 
       # if user_input['dataset_train'].endswith(".pt"):
@@ -55,7 +55,7 @@ class AgentSelector:
       print(f"Loaded training data from {train_path}. X_train shape: {getattr(X_train, 'shape', 'N/A')}, y_train shape: {getattr(y_train, 'shape', 'N/A')}")
       print(f"Dimension: {X_train.shape[1]}")
       
-      self.n_features = X_train.shape[1]
+      self.feature_dim = X_train.shape[1]
 
       # Only load test data if test_path is provided and not empty
       if test_path and os.path.exists(test_path):
@@ -86,7 +86,7 @@ class AgentSelector:
 
     def set_tools(self):
       user_input = self.user_input
-      if user_input['algorithm'] or (user_input['algorithm'] and user_input['algorithm'][0].lower() == "all"):
+      if user_input['algorithm'] or user_input['algorithm'][0].lower() == "all":
         self.tools = self.generate_tools(user_input['algorithm'])
         self.algorithm = user_input['algorithm']
       else:
@@ -145,7 +145,7 @@ class AgentSelector:
     #               documents.extend(chunks)
 
     #   return documents
-    
+
     # def build_vectorstore(self,documents):
     #   """
     #   The segmented document blocks are converted into vectors and stored in the FAISS vector database.

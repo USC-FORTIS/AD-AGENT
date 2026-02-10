@@ -106,6 +106,42 @@ python main.py -o
 
 ---
 
+## 🧩 Pipeline API (Reusable Interfaces)
+
+You can import and use the pipeline stages directly without running the full CLI flow.
+
+```python
+from pipeline_api import (
+  build_state,
+  run_selector,
+  run_info_miner,
+  run_reviewer_loop,
+  run_evaluator_loop,
+)
+
+# Provide experiment_config directly (skip processor)
+state = build_state({
+  "algorithm": ["IForest"],
+  "dataset_train": "./data/glass_train.mat",
+  "dataset_test": "./data/glass_test.mat",
+  "parameters": {},
+})
+
+# Selector
+state = run_selector(state)
+
+# Run one tool through reviewer loop
+tool = "IForest"
+doc = run_info_miner(state, tool)
+cq = run_reviewer_loop(state, tool, algorithm_doc=doc)
+
+# Or run reviewer + evaluator in one call
+final_cq = run_evaluator_loop(state, tool, algorithm_doc=doc)
+print(final_cq.auroc, final_cq.auprc)
+```
+
+---
+
 ## 🧪 Test Commands
 
 You can also run the system with natural-language-like test commands.
