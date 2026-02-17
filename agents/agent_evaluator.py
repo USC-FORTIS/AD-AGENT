@@ -1,7 +1,8 @@
-import os, re, subprocess, sys
+import os, re, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from entity.code_quality import CodeQuality
+from sandbox.executor import execute_code as sandbox_execute_code
 
 class AgentEvaluator:
     """
@@ -10,36 +11,39 @@ class AgentEvaluator:
     """
 
     # ---------- public ----------
-    def execute_code(self, code: str, algorithm_name: str) -> CodeQuality:
-        # Create folder for generated scripts if it doesn't exist
-        folder = "./generated_scripts"
-        os.makedirs(folder, exist_ok=True)
-
-        # Save the provided code to a Python file
-        path = os.path.join(folder, f"{algorithm_name}.py")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(code)
-
-        # Execute the script using subprocess and capture output
-        res = subprocess.run(["python", path], capture_output=True, text=True)
-        print("\n=== Real-Data Execution Output ===\n", res.stdout, res.stderr)
+    def execute_code(
+        self,
+        code: str,
+        algorithm_name: str,
+        package_name: str = "pyod",
+        data_files: dict[str, str] | None = None,
+    ) -> CodeQuality:
+        # Execute the script in sandbox (Modal or local subprocess)
+        stdout, stderr, returncode = sandbox_execute_code(
+            code=code,
+            algorithm_name=algorithm_name,
+            package_name=package_name,
+            data_files=data_files,
+            timeout=180,
+        )
+        print("\n=== Real-Data Execution Output ===\n", stdout, stderr)
 
         # If execution failed, return error result
-        if res.returncode != 0:
+        if returncode != 0:
             return CodeQuality(
                 code=code, algorithm=algorithm_name, parameters={}, std_output="",
-                error_message=res.stderr,
+                error_message=stderr,
                 auroc=-1, auprc=-1, error_points=[], review_count=0
             )
 
         # Parse metrics from the script output
-        auroc  = self._find_float(r"AUROC:\s*([\d.]+)", res.stdout)
-        auprc  = self._find_float(r"AUPRC:\s*([\d.]+)", res.stdout)
-        errors = self._parse_errors(res.stdout)
+        auroc  = self._find_float(r"AUROC:\s*([\d.]+)", stdout)
+        auprc  = self._find_float(r"AUPRC:\s*([\d.]+)", stdout)
+        errors = self._parse_errors(stdout)
 
         # Return evaluation result
         return CodeQuality(
-            code=code, algorithm=algorithm_name, parameters={}, std_output=res.stdout,
+            code=code, algorithm=algorithm_name, parameters={}, std_output=stdout,
             error_message="", auroc=auroc, auprc=auprc,
             error_points=errors, review_count=0
         )

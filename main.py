@@ -165,7 +165,7 @@ def call_evaluator_for_single_tool(state: FullToolState) -> dict:
     tool      = state["current_tool"]
 
     print(f"\n=== [Evaluator] Real‑data run for {tool} ===")
-    final_cq = evaluator.execute_code(cq.code, tool)
+    final_cq = evaluator.execute_code(cq.code, tool, package_name=state["package_name"])
 
     # keep review_count & parameters
     final_cq.review_count = cq.review_count
@@ -192,7 +192,8 @@ def call_optimizer_for_single_tool(state: FullToolState) -> dict:
     tuned_cq = optimizer.run(llm=llm,
                              quality=cq,
                              algorithm_doc=doc,
-                             max_steps=8)
+                             max_steps=8,
+                             package_name=state["package_name"])
     print(f"\n=== [Optimizer] Tuning finished for {state['current_tool']} ===")
     return {"code_quality": tuned_cq}
 

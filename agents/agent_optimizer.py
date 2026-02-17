@@ -1,7 +1,6 @@
 import ast
 import os
 import re
-import subprocess
 from typing import Any, Dict, List, Optional
 import sys
 
@@ -13,6 +12,7 @@ from langchain_openai import ChatOpenAI
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 from config.config import Config
+from sandbox.executor import execute_code as sandbox_execute_code
 os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
 
 SYSTEM_PROMPT_TMPL = PromptTemplate.from_template(
@@ -62,7 +62,12 @@ class AgentOptimizer:
     _FINAL_RE = re.compile(r"^Final:(.*)$", re.MULTILINE)
 
     @staticmethod
-    def execute_code(parameters: Dict[str, Any], base_code: str, algorithm_name: str) -> str:
+    def execute_code(
+        parameters: Dict[str, Any],
+        base_code: str,
+        algorithm_name: str,
+        package_name: str = "pyod",
+    ) -> str:
         """Run modified code with injected parameters."""
         pat = re.compile(r"(model\s*=\s*[A-Za-z_]+\s*\()(.*?)(\))", re.DOTALL)
         match = pat.search(base_code)
@@ -72,20 +77,16 @@ class AgentOptimizer:
         new_params = ", ".join(f"{k}={repr(v)}" for k, v in parameters.items())
         new_code = base_code[:match.start()] + match.group(1) + new_params + match.group(3) + base_code[match.end():]
 
-        folder = "./generated_scripts"
-        os.makedirs(folder, exist_ok=True)
-        path = os.path.join(folder, f"{algorithm_name}.py")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(new_code)
-
-        try:
-            result = subprocess.run(["python", path], capture_output=True, text=True, timeout=60)
-            output = result.stdout + result.stderr
-            if result.returncode != 0:
-                output += f"\n[ERROR] Return code: {result.returncode}"
-            return output.strip()
-        except subprocess.TimeoutExpired:
-            return "[ERROR] Execution timed out."
+        stdout, stderr, returncode = sandbox_execute_code(
+            code=new_code,
+            algorithm_name=algorithm_name,
+            package_name=package_name,
+            timeout=60,
+        )
+        output = stdout + stderr
+        if returncode != 0:
+            output += f"\n[ERROR] Return code: {returncode}"
+        return output.strip()
 
     @classmethod
     def _extract_param_dict(cls, text: str) -> Optional[Dict[str, Any]]:
@@ -130,7 +131,8 @@ class AgentOptimizer:
         llm: ChatOpenAI,
         quality: CodeQuality,
         algorithm_doc: str,
-        max_steps: int = 8
+        max_steps: int = 8,
+        package_name: str = "pyod",
     ) -> CodeQuality:
         """Run the optimization loop using the given inputs and return CodeQuality."""
         code = quality.code
@@ -165,11 +167,11 @@ class AgentOptimizer:
             if "Final:" in content:
                 break
 
-            observation = self.execute_code(param_dict, code, algorithm_name)
+            observation = self.execute_code(param_dict, code, algorithm_name, package_name=package_name)
             print(observation)
             messages.append(HumanMessage(content=f"Observation: {observation[:4000]}"))
 
-        final_output = self.execute_code(final_params, code, algorithm_name)
+        final_output = self.execute_code(final_params, code, algorithm_name, package_name=package_name)
 
         auroc = self._find_float(r"AUROC:\s*([0-9.]+)", final_output, default=quality.auroc)
         auprc = self._find_float(r"AUPRC:\s*([0-9.]+)", final_output, default=quality.auprc)

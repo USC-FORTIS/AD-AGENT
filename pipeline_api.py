@@ -150,7 +150,7 @@ def run_reviewer(
 def run_evaluator(state: Dict[str, Any], code_quality: CodeQuality, tool: str) -> CodeQuality:
     """Run evaluator once on real data and return updated CodeQuality."""
     evaluator = state["agent_evaluator"]
-    final_cq = evaluator.execute_code(code_quality.code, tool)
+    final_cq = evaluator.execute_code(code_quality.code, tool, package_name=state["package_name"])
     final_cq.review_count = code_quality.review_count
     final_cq.parameters = code_quality.parameters
     return final_cq
@@ -172,6 +172,7 @@ def run_optimizer(
         quality=code_quality,
         algorithm_doc=algorithm_doc,
         max_steps=max_steps,
+        package_name=state["package_name"],
     )
     return tuned_cq
 

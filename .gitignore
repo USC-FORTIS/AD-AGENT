@@ -177,6 +177,9 @@ cython_debug/
 .env
 
 
+# Data files (too large for git)
+data/
+
 # Ignore generated files
 /generated_scripts
 train_data_loader.py

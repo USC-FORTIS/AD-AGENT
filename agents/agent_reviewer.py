@@ -1,9 +1,10 @@
-import subprocess, os, re, sys
+import os, re, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from config.config import Config
+from sandbox.executor import execute_code
 
 # Ensure API key is available for OpenAI client
 os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
@@ -125,21 +126,17 @@ class AgentReviewer:
             ).content
             test_script = self._clean_markdown(test_script)
 
-            # 2) Save the rewritten script to file
-            folder = "generated_scripts"
-            os.makedirs(folder, exist_ok=True)
-            path = os.path.join(folder, f"{algorithm_name}_test.py")
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(test_script)
+            # 2) Execute the test script in sandbox
+            stdout, stderr, returncode = execute_code(
+                code=test_script,
+                algorithm_name=f"{algorithm_name}_test",
+                package_name=package_name,
+                timeout=120,
+            )
+            print("\n=== Test Execution Output ===\n", stdout, stderr)
 
-            # 3) Execute the test script
-            res = subprocess.run(["python", path],
-                                 capture_output=True, text=True)
-            print("\n=== Test Execution Output ===\n",
-                  res.stdout, res.stderr)
-
-            if res.returncode != 0:
-                return res.stderr
+            if returncode != 0:
+                return stderr
             else:
                 return ""
         except Exception as e:

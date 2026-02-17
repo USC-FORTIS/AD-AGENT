@@ -106,3 +106,4 @@ patool==3.0.0
 sktime==0.37.0
 reformer-pytorch == 1.4.4
 PyWavelets
+modal
