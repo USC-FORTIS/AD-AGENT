@@ -3,6 +3,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+from config.config import Config
+
+# Ensure API key is available for OpenAI client
+os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
 
 # Initialize the OpenAI LLM
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -14,13 +18,15 @@ You will receive a Python script for {package_name} that trains an anomaly-detec
 --- BEGIN CODE ---
 {code}
 --- END CODE ---
-                                           
+                                                               
 TASK:
 1. Replace **all data-loading operations** (DataLoader, torch.load, np.load, pandas.read*, etc.)
    with code that creates SMALL synthetic data directly in the script:
-   • For PyOD: generate X_train, y_train, X_test, y_test using `generate_data`; 
-     `from pyod.utils.data import generate_data`
-     `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1)`
+     • For PyOD: generate X_train, y_train, X_test, y_test using `generate_data`;
+         `from pyod.utils.data import generate_data`
+         If {n_features} is provided (>0), set `n_features={n_features}`.
+         Example:
+         `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=n_features)`
    • For PyGOD: build train and test graph follow instruction below;
      `import torch`
      `from pygod.generator import gen_contextual_outlier, gen_structural_outlier`
@@ -100,7 +106,8 @@ class AgentReviewer:
         self,
         code: str,
         algorithm_name: str,
-        package_name: str
+        package_name: str,
+        n_features: int | None = None,
     ) -> str:
         """
         Generate a test script using synthetic data and execute it.
@@ -112,7 +119,8 @@ class AgentReviewer:
                 test_prompt.invoke({
                     "code": code,
                     "algorithm_name": algorithm_name,
-                    "package_name": package_name
+                    "package_name": package_name,
+                    "n_features": n_features
                 })
             ).content
             test_script = self._clean_markdown(test_script)
@@ -162,3 +170,24 @@ class AgentReviewer:
                     nums = [float(x.strip()) for x in m.group(1).split(",")]
                     pts.append({"point": nums, "true_label": float(m.group(2))})
         return pts
+
+
+if __name__ == "__main__":
+    # Simple smoke test for AgentReviewer
+    sample_code = """
+from pyod.utils.data import generate_data
+from pyod.models.iforest import IForest
+
+X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1)
+clf = IForest()
+clf.fit(X_train)
+preds = clf.predict(X_test)
+print("preds:", preds[:10])
+"""
+
+    reviewer = AgentReviewer()
+    error = reviewer.test_code(code=sample_code, algorithm_name="IForest", package_name="pyod")
+    if error:
+        print("Test failed:", error)
+    else:
+        print("Test passed")

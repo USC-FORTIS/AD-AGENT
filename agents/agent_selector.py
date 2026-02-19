@@ -1,6 +1,6 @@
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import CharacterTextSplitter
+# from langchain_community.vectorstores import FAISS
+# from langchain_openai import OpenAIEmbeddings
+# from langchain.text_splitter import CharacterTextSplitter
 import os
 import sys
 
@@ -19,6 +19,8 @@ class AgentSelector:
       self.data_path_train = user_input['dataset_train']
       self.data_path_test = user_input['dataset_test']
       self.user_input = user_input
+      self.n_features = None
+      self.algorithm = None
 
       # if user_input['dataset_train'].endswith(".pt"):
       #   self.package_name = "pygod"
@@ -30,25 +32,30 @@ class AgentSelector:
       # else:
       #   self.package_name = "darts"
 
-
-      self.tools = self.generate_tools(user_input['algorithm'])
-
+      # Change Order
+      # Logic Problem
       self.load_data(self.data_path_train, self.data_path_test)
+
+      self.tools = None
       self.set_tools()
 
       print(f"Package name: {self.package_name}")
-      print(f"Algorithm: {user_input['algorithm']}")
+      print(f"Algorithm: {self.algorithm}")
       print(f"Tools: {self.tools}")
 
       
-      self.documents = self.load_and_split_documents()
-      self.vectorstore = self.build_vectorstore(self.documents)
+      # self.documents = self.load_and_split_documents()
+      # self.vectorstore = self.build_vectorstore(self.documents)
 
     def load_data(self, train_path, test_path):
       train_loader = DataLoader(train_path, store_script=True, store_path='train_data_loader.py')
       X_train, y_train = train_loader.load_data(split_data=False)
       self.X_train = X_train
       self.y_train = y_train
+      print(f"Loaded training data from {train_path}. X_train shape: {getattr(X_train, 'shape', 'N/A')}, y_train shape: {getattr(y_train, 'shape', 'N/A')}")
+      print(f"Dimension: {X_train.shape[1]}")
+      
+      self.n_features = X_train.shape[1]
 
       # Only load test data if test_path is provided and not empty
       if test_path and os.path.exists(test_path):
@@ -79,9 +86,11 @@ class AgentSelector:
 
     def set_tools(self):
       user_input = self.user_input
-      if user_input['algorithm'] and user_input['algorithm'][0].lower() == "all":
+      if user_input['algorithm'] or (user_input['algorithm'] and user_input['algorithm'][0].lower() == "all"):
         self.tools = self.generate_tools(user_input['algorithm'])
+        self.algorithm = user_input['algorithm']
       else:
+        algorithm = None
         name = os.path.basename(self.data_path_train)
         if self.package_name == "pyod":
           size = self.X_train.shape[0]
@@ -89,6 +98,7 @@ class AgentSelector:
           messages = generate_model_selection_prompt_from_pyod(name, size, dim)
           content = query_openai(messages, model="o4-mini")
           algorithm = json.loads(content)["choice"]
+          print(f"Algorithm: {algorithm}")
         elif self.package_name == 'pygod':
           num_node = self.X_train.num_nodes
           num_edge = self.X_train.num_edges
@@ -113,33 +123,37 @@ class AgentSelector:
             print(f"Algorithm: {algorithm}")
           else:
             algorithm = 'Autoformer'
+        self.algorithm = algorithm
+        self.tools = algorithm
 
         print('Selector Parameters:', self.parameters)
         
 
-    def load_and_split_documents(self,folder_path="./docs"):
-      """
-      load ./docs txt doc, divided into small blocks。
-      """
-      documents = []
-      text_splitter = CharacterTextSplitter(separator="\n", chunk_size=700, chunk_overlap=150)
+    # def load_and_split_documents(self,folder_path="../docs"):
+    #   """
+    #   load ../docs txt doc, divided into small blocks。
+    #   """
+    #   documents = []
+    #   text_splitter = CharacterTextSplitter(separator="\n", chunk_size=700, chunk_overlap=150)
 
-      for filename in os.listdir(folder_path):
-         if filename.startswith(self.package_name):
-               file_path = os.path.join(folder_path, filename)
-               with open(file_path, "r", encoding="utf-8") as file:
-                  text = file.read()
-                  chunks = text_splitter.split_text(text)
-                  documents.extend(chunks)
+    #   for filename in os.listdir(folder_path):
+    #      if filename.startswith(self.package_name):
+    #            file_path = os.path.join(folder_path, filename)
+    #            with open(file_path, "r", encoding="utf-8") as file:
+    #               text = file.read()
+    #               chunks = text_splitter.split_text(text)
+    #               documents.extend(chunks)
 
-      return documents
-    def build_vectorstore(self,documents):
-      """
-      The segmented document blocks are converted into vectors and stored in the FAISS vector database.
-      """
-      embedding = OpenAIEmbeddings()
-      vectorstore = FAISS.from_texts(documents, embedding)
-      return vectorstore
+    #   return documents
+    
+    # def build_vectorstore(self,documents):
+    #   """
+    #   The segmented document blocks are converted into vectors and stored in the FAISS vector database.
+    #   """
+    #   embedding = OpenAIEmbeddings()
+    #   vectorstore = FAISS.from_texts(documents, embedding)
+    #   return vectorstore
+    
     def generate_tools(self,algorithm_input):
       """Generates the tools for the agent."""
       if algorithm_input[0].lower() == "all":
@@ -168,8 +182,8 @@ if __name__ == "__main__":
 
   user_input = {
     "algorithm": ['TimesNet'],
-    "dataset_train": "./data/MSL",
-    "dataset_test": "./data/MSL",
+    "dataset_train": "../data/MSL",
+    "dataset_test": "../data/MSL",
     "parameters": {
     }
   }

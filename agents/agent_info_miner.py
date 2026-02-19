@@ -105,7 +105,7 @@ class AgentInfoMiner:
     def __init__(self):
         pass
 
-    def query_docs(self, algorithm, vectorstore, package_name,cache_path = "cache.json"):
+    def query_docs(self, algorithm, package_name,cache_path = "cache.json"):
         """Searches for relevant documentation with caching, expiration, and thread-safe cache writes."""
 
         lock_path = cache_path + ".lock"

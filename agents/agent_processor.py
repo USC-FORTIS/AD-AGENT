@@ -147,7 +147,7 @@ class AgentProcessor:
         """
         while not all(
             [
-                self.experiment_config["algorithm"],
+                # self.experiment_config["algorithm"],
                 self.experiment_config["dataset_train"],
                 os.path.exists(self.experiment_config["dataset_train"]),
                 (
@@ -184,17 +184,24 @@ class AgentProcessor:
                 self.experiment_config["dataset_train"] = extracted["dataset_train"]
             if extracted.get("dataset_test"):
                 self.experiment_config["dataset_test"] = extracted["dataset_test"]
+            else:
+                self.experiment_config["dataset_test"] = ""
             if extracted.get("parameters"):
                 self.experiment_config["parameters"].update(extracted["parameters"])
 
             # Missing field guidance
-            if not self.experiment_config["algorithm"]:
-                print("Chatbot: Please specify which algorithm to run.")
+            # if not self.experiment_config["algorithm"]:
+            #     print("Chatbot: Please specify which algorithm to run.")
             if (
                 not self.experiment_config["dataset_train"]
                 or not os.path.exists(self.experiment_config["dataset_train"])
             ):
                 print("Chatbot: Please provide a valid training dataset location.")
+            if (
+                self.experiment_config["dataset_test"]
+                and not os.path.exists(self.experiment_config["dataset_test"])
+            ):
+                print("Chatbot: Please provide a valid testing dataset location (or leave it empty if not applicable).")
 
         # Final output summary
         print("\nExperiment Configuration")

@@ -29,7 +29,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
    (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head
    (2) import DataLoader using following commend `from data_loader.data_loader import DataLoader` after (1)
    (3) Initialize DataLoader using statement `dataloader_train = DataLoader(filepath = {data_path_train}, store_script=True, store_path = 'train_data_loader.py')` & `dataloader_test = DataLoader(filepath = {data_path_test}, store_script=True, store_path = 'test_data_loader.py')`
-   (4) Use the statement `X_train, y_train = dataloader_train.load_data(split_data=False)` & `X_test, y_test = dataloader_train.load_data(split_data=False)` to generate variables X_train, y_train, X_test, y_test; 
+   (4) Use the statement `X_train, y_train = dataloader_train.load_data(split_data=False)` & `X_test, y_test = dataloader_test.load_data(split_data=False)` to generate variables X_train, y_train, X_test, y_test; 
    (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
    (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
    (7) Use `.decision_scores_` on `X_train` for training outlier scores

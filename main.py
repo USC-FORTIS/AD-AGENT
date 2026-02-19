@@ -43,6 +43,7 @@ class FullToolState(TypedDict):
     experiment_config: dict | None
     results         : List[Tuple[str, Any]] | None
     algorithm_doc   : str | None
+    n_features     : int | None
 
 # ------------------------------------------------------------------
 # Node: processor
@@ -50,6 +51,7 @@ class FullToolState(TypedDict):
 def call_processor(state: FullToolState) -> dict:
     processor = state["agent_processor"]
     print("\n=== [Processor] Processing user input ===")
+    # Interact
     processor.run_chatbot()
     state["experiment_config"] = processor.experiment_config
     print("\n=== [Processor] User input processing complete ===")
@@ -70,7 +72,8 @@ def call_selector(state: FullToolState) -> dict:
         data_path_train = selector.data_path_train,
         data_path_test  = selector.data_path_test,
         package_name    = selector.package_name,
-        vectorstore     = selector.vectorstore
+        n_features     = selector.n_features,
+        # vectorstore     = selector.vectorstore
     )
     print("\n=== [Selector] Selection complete ===")
     return state
@@ -83,7 +86,6 @@ def call_info_miner(state: FullToolState) -> dict:
     info_miner = state["agent_info_miner"]
     doc = info_miner.query_docs(
         state["current_tool"],
-        state["vectorstore"],
         state["package_name"]
     )
     print(f"\n=== [Info_miner] Documentation retrieved for {state['current_tool']} ===")
@@ -129,7 +131,12 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
     tool     = state["current_tool"]
 
     print(f"\n=== [Reviewer] Running validation for {tool} ===")
-    cq.error_message = reviewer.test_code(cq.code, tool, state["package_name"])
+    cq.error_message = reviewer.test_code(
+        cq.code,
+        tool,
+        state["package_name"],
+        n_features=state.get("n_features"),
+    )
 
     if cq.error_message:
         cq.review_count += 1
@@ -300,6 +307,7 @@ async def main():
         "experiment_config": None,
         "results"         : None,
         "algorithm_doc"   : None,
+        "n_features"     : None,
     }
 
     print("\n=== [Main] Starting full pipeline ===")
