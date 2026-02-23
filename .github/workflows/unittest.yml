@@ -2,7 +2,7 @@ name: Python Unittest
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, separate-clean]
   pull_request:
 
 jobs:
