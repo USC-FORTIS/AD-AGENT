@@ -1,14 +1,30 @@
-import logging, sys, operator, asyncio, os
-from typing import TypedDict, Annotated, Sequence, List, Tuple, Any
+import logging, sys, asyncio, os
 
 from config.config import Config
-os.environ["OPENAI_API_KEY"] = Config.OPENAI_API_KEY
+api_key = os.getenv("OPENAI_API_KEY") or Config.OPENAI_API_KEY
+if not api_key:
+    raise ValueError(
+        "OPENAI_API_KEY is missing. Set environment variable OPENAI_API_KEY "
+        "or set Config.OPENAI_API_KEY in config/config.py."
+    )
+os.environ["OPENAI_API_KEY"] = api_key
 logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
 
 # ========== langgraph ==========
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph, END
-from langchain_openai          import ChatOpenAI
+
+# ========== pipeline API (tool‑specific calls) ==========
+from pipeline_interface import (
+    FullToolState,
+    run_processor, 
+    run_selector, 
+    run_code_generator,
+    run_info_miner,
+    run_reviewer,
+    run_evaluator,
+    run_optimizer
+)
 
 # ========== business agents ==========
 from agents.agent_processor import AgentProcessor
@@ -20,128 +36,6 @@ from agents.agent_evaluator    import AgentEvaluator
 from agents.agent_optimizer    import AgentOptimizer        # ★ new
 from entity.code_quality       import CodeQuality
 
-# ------------------------------------------------------------------
-# Full state
-# ------------------------------------------------------------------
-class FullToolState(TypedDict):
-    messages        : Annotated[Sequence[Any], operator.add]
-    current_tool    : str
-    input_parameters: dict
-    data_path_train : str
-    data_path_test  : str
-    package_name    : str
-    agent_info_miner : Any
-    agent_code_generator     : Any
-    agent_reviewer  : Any
-    agent_evaluator : Any
-    agent_optimizer : Any                                 # ★ new
-    vectorstore     : Any
-    code_quality    : Any | None
-    should_rerun    : bool
-    agent_processor: Any
-    agent_selector  : Any | None
-    experiment_config: dict | None
-    results         : List[Tuple[str, Any]] | None
-    algorithm_doc   : str | None
-    n_features     : int | None
-
-# ------------------------------------------------------------------
-# Node: processor
-# ------------------------------------------------------------------
-def call_processor(state: FullToolState) -> dict:
-    processor = state["agent_processor"]
-    print("\n=== [Processor] Processing user input ===")
-    # Interact
-    processor.run_chatbot()
-    state["experiment_config"] = processor.experiment_config
-    print("\n=== [Processor] User input processing complete ===")
-    return state
-
-# ------------------------------------------------------------------
-# Node: Selector
-# ------------------------------------------------------------------
-def call_selector(state: FullToolState) -> dict:
-    print("\n=== [Selector] Processing user input ===")
-    if state["experiment_config"] is None:
-        raise ValueError("experiment_config not set, run processor first!")
-    print("\n=== [Selector] Selecting package & algorithm ===")
-    selector = AgentSelector(state["experiment_config"])
-    state.update(
-        agent_selector = selector,
-        input_parameters = selector.parameters,
-        data_path_train = selector.data_path_train,
-        data_path_test  = selector.data_path_test,
-        package_name    = selector.package_name,
-        n_features     = selector.n_features,
-        # vectorstore     = selector.vectorstore
-    )
-    print("\n=== [Selector] Selection complete ===")
-    return state
-
-# ------------------------------------------------------------------
-# Node: info_miner
-# ------------------------------------------------------------------
-def call_info_miner(state: FullToolState) -> dict:
-    print(f"\n=== [Info_miner] Querying documentation for {state['current_tool']} ===")
-    info_miner = state["agent_info_miner"]
-    doc = info_miner.query_docs(
-        state["current_tool"],
-        state["package_name"]
-    )
-    print(f"\n=== [Info_miner] Documentation retrieved for {state['current_tool']} ===")
-    return {"algorithm_doc": doc}
-
-# ------------------------------------------------------------------
-# Node: code_generator  (generate / revise, **no execution**)
-# ------------------------------------------------------------------
-def call_code_generator_for_single_tool(state: FullToolState) -> dict:
-    code_generator = state["agent_code_generator"]
-    tool  = state["current_tool"]
-
-    # generate code || revise code
-    if state["code_quality"] is None:
-        print(f"\n=== [code_generator] Generating code for {tool} ===")
-        code = code_generator.generate_code(
-            algorithm       = tool,
-            data_path_train = state["data_path_train"],
-            data_path_test  = state["data_path_test"],
-            algorithm_doc   = state["algorithm_doc"],
-            input_parameters= state["input_parameters"],
-            package_name    = state["package_name"]
-        )
-        parameters = code_generator._extract_init_params_dict(state["algorithm_doc"])
-        cq = CodeQuality(code=code, algorithm=tool, parameters=parameters, std_output="",
-                         error_message="", auroc=-1, auprc=-1,
-                         error_points=[], review_count=0)
-    else:
-        print( f"\n=== [code_generator] Revising code for {tool} ===")
-        cq = state["code_quality"]
-        code = code_generator.revise_code(cq, state["algorithm_doc"])
-        cq.code = code                                 # cover new code
-
-    return {"code_quality": cq}
-
-# ------------------------------------------------------------------
-# Node: Reviewer  (synthetic‑data test)
-# ------------------------------------------------------------------
-
-def call_reviewer_for_single_tool(state: FullToolState) -> dict:
-    reviewer = state["agent_reviewer"]
-    cq       = state["code_quality"]
-    tool     = state["current_tool"]
-
-    print(f"\n=== [Reviewer] Running validation for {tool} ===")
-    cq.error_message = reviewer.test_code(
-        cq.code,
-        tool,
-        state["package_name"],
-        n_features=state.get("n_features"),
-    )
-
-    if cq.error_message:
-        cq.review_count += 1
-    print(f"\n=== [Reviewer] Validation completed for {tool} ===")
-    return {"code_quality": cq}
 
 # ------------------------------------------------------------------
 # Node: Decider  (branch: rerun | evaluate)
@@ -155,46 +49,6 @@ def decide_next(state: FullToolState) -> dict:
 def route_selector(state: FullToolState):
     return state["route"]
 
-# ------------------------------------------------------------------
-# Node: Evaluator  (real‑data execution & metrics)
-# ------------------------------------------------------------------
-
-def call_evaluator_for_single_tool(state: FullToolState) -> dict:
-    evaluator = state["agent_evaluator"]
-    cq        = state["code_quality"]
-    tool      = state["current_tool"]
-
-    print(f"\n=== [Evaluator] Real‑data run for {tool} ===")
-    final_cq = evaluator.execute_code(cq.code, tool)
-
-    # keep review_count & parameters
-    final_cq.review_count = cq.review_count
-    final_cq.parameters = cq.parameters
-    return {"code_quality": final_cq}
-
-# ------------------------------------------------------------------
-# Node: Optimizer  (LLM‑driven parameter tuning)
-# ------------------------------------------------------------------
-
-def call_optimizer_for_single_tool(state: FullToolState) -> dict:
-    optimizer = state["agent_optimizer"]
-    cq        = state["code_quality"]
-    doc       = state["algorithm_doc"]
-    if "-o" not in sys.argv:
-        return {"code_quality": cq}  # skip if not in optimizer mode
-    if cq is None:
-        raise ValueError("code_quality is None before optimizer")
-    if cq.error_message:
-        return {"code_quality": cq}
-
-    print(f"\n=== [Optimizer] Parameter tuning for {state['current_tool']} ===")
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
-    tuned_cq = optimizer.run(llm=llm,
-                             quality=cq,
-                             algorithm_doc=doc,
-                             max_steps=8)
-    print(f"\n=== [Optimizer] Tuning finished for {state['current_tool']} ===")
-    return {"code_quality": tuned_cq}
 
 # ------------------------------------------------------------------
 # Build single‑tool StateGraph
@@ -202,12 +56,12 @@ def call_optimizer_for_single_tool(state: FullToolState) -> dict:
 
 single_tool_graph = StateGraph(FullToolState)
 
-single_tool_graph.add_node("info_miner", call_info_miner)
-single_tool_graph.add_node("code_generator",      call_code_generator_for_single_tool)
-single_tool_graph.add_node("reviewer",   call_reviewer_for_single_tool)
+single_tool_graph.add_node("info_miner", lambda state: run_info_miner(state=state))
+single_tool_graph.add_node("code_generator", lambda state: run_code_generator(state=state))
+single_tool_graph.add_node("reviewer", lambda state: run_reviewer(state=state))
 single_tool_graph.add_node("decider",    decide_next)
-single_tool_graph.add_node("evaluator",  call_evaluator_for_single_tool)
-single_tool_graph.add_node("optimizer",  call_optimizer_for_single_tool)      # ★ new
+single_tool_graph.add_node("evaluator", lambda state: run_evaluator(state=state))
+single_tool_graph.add_node("optimizer", lambda state: run_optimizer(state=state))      # ★ new
 
 single_tool_graph.set_entry_point("info_miner")
 single_tool_graph.add_edge("info_miner", "code_generator")
@@ -267,9 +121,9 @@ def process_all_tools(state: FullToolState) -> dict:
 # ------------------------------------------------------------------
 
 full_graph = StateGraph(FullToolState)
-full_graph.add_node("processor",     call_processor)
-full_graph.add_node("selector",         call_selector)
-full_graph.add_node("process_all_tools",process_all_tools)
+full_graph.add_node("processor", lambda state: run_processor(state))
+full_graph.add_node("selector", lambda state: run_selector(state=state))
+full_graph.add_node("process_all_tools", lambda state: process_all_tools(state))
 
 full_graph.set_entry_point("processor")
 full_graph.add_edge("processor",     "selector")

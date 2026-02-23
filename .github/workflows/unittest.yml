@@ -20,4 +20,4 @@ jobs:
         env:
           OPENAI_API_KEY: test-key
         run: |
-          python -m unittest discover -s api_test -p "test_*.py" -v
+          python -m unittest discover -s test -p "test_*.py" -v
