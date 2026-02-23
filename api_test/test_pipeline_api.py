@@ -1,68 +1,93 @@
-import json
-import os
 import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from pipeline_api import (
-    run_processor,
-    run_selector,
-    run_info_miner,
-    run_code_generator,
-    run_reviewer,
-    run_evaluator,
-    run_optimizer,
-    run_codegenerator_reviewer_loop,
-    run_evaluator_optimizer_loop,
-)
+import tempfile
+import types
+import unittest
+from unittest.mock import patch
 
 
-def main():
-    # Example experiment config (PyOD)
+def _install_stubs():
+    class _DummyAgent:
+        pass
 
-    # Run Processor to process user input
-    run_processor()
+    class _DummyConfig:
+        OPENAI_API_KEY = "test-key"
 
-    # Run selector
-    algorithm = ["IForest"]  # Can be several algorithms or "all" or let the agent choose
-    dataset_train = "./data/glass_train.mat"
-    dataset_test = "./data/glass_test.mat"
-    parameters = {"contamination": 0.1}
-    run_selector(algorithm=algorithm, dataset_train=dataset_train, dataset_test=dataset_test, parameters=parameters)
+    def _noop(state):
+        return state
 
-    # Run info miner
-    algorithm = "IForest"
-    package_name = "PyOD" 
-    run_info_miner(algorithm, package_name)
+    config_pkg = types.ModuleType("config")
+    config_mod = types.ModuleType("config.config")
+    config_mod.Config = _DummyConfig
 
-    # Code Generator
-    tool = "IForest"
-    data_path_train = "./data/glass_train.mat"
-    data_path_test = "./data/glass_test.mat"
-    with open("cache.json", "r") as f:
-        cache = json.load(f)
-    algorithm_doc = cache.get(tool, "No doc found in cache")
-    algorithm_doc = algorithm_doc.get('document', str(algorithm_doc))
-    package_name = "pyod"
-    cq = run_code_generator(tool=tool, data_path_train=data_path_train, data_path_test=data_path_test, algorithm_doc=algorithm_doc, package_name=package_name)
+    agents_pkg = types.ModuleType("agents")
+    agent_processor_mod = types.ModuleType("agents.agent_processor")
+    agent_processor_mod.AgentProcessor = _DummyAgent
+    agent_info_miner_mod = types.ModuleType("agents.agent_info_miner")
+    agent_info_miner_mod.AgentInfoMiner = _DummyAgent
+    agent_code_generator_mod = types.ModuleType("agents.agent_code_generator")
+    agent_code_generator_mod.AgentCodeGenerator = _DummyAgent
+    agent_reviewer_mod = types.ModuleType("agents.agent_reviewer")
+    agent_reviewer_mod.AgentReviewer = _DummyAgent
+    agent_evaluator_mod = types.ModuleType("agents.agent_evaluator")
+    agent_evaluator_mod.AgentEvaluator = _DummyAgent
+    agent_optimizer_mod = types.ModuleType("agents.agent_optimizer")
+    agent_optimizer_mod.AgentOptimizer = _DummyAgent
 
-    # # Code Reviewer
-    run_reviewer(cq, tool, 8)
-    
-    # Code Generator + Reviewer loop
-    cq = run_codegenerator_reviewer_loop(tool=tool, data_path_train=data_path_train, algorithm_doc=algorithm_doc, package_name=package_name, data_path_test=data_path_test, max_reviews=10, n_features=8)
+    main_mod = types.ModuleType("main")
+    main_mod.call_processor = _noop
+    main_mod.call_selector = _noop
+    main_mod.call_info_miner = _noop
+    main_mod.call_code_generator_for_single_tool = _noop
+    main_mod.call_reviewer_for_single_tool = _noop
+    main_mod.call_evaluator_for_single_tool = _noop
+    main_mod.call_optimizer_for_single_tool = _noop
 
-    # Evaluator
-    run_evaluator(code_quality=cq, tool=tool)
+    sys.modules.setdefault("config", config_pkg)
+    sys.modules["config.config"] = config_mod
+    sys.modules.setdefault("agents", agents_pkg)
+    sys.modules["agents.agent_processor"] = agent_processor_mod
+    sys.modules["agents.agent_info_miner"] = agent_info_miner_mod
+    sys.modules["agents.agent_code_generator"] = agent_code_generator_mod
+    sys.modules["agents.agent_reviewer"] = agent_reviewer_mod
+    sys.modules["agents.agent_evaluator"] = agent_evaluator_mod
+    sys.modules["agents.agent_optimizer"] = agent_optimizer_mod
+    sys.modules["main"] = main_mod
 
-    # Optmizer
-    run_optimizer(code_quality=cq, algorithm_doc=algorithm_doc)
 
-    # Evaluator + Optimizer loop (optional)
-    run_evaluator_optimizer_loop(cq=cq, tool=tool, algorithm_doc=algorithm_doc, optimizer_cycles=2)
+_install_stubs()
+import pipeline_api
+
+
+class TestPipelineAPI(unittest.TestCase):
+    def test_check_dataset_exists_train_missing(self):
+        with self.assertRaises(FileNotFoundError):
+            pipeline_api.check_dataset_exists("./not_exist_train.mat")
+
+    def test_check_dataset_exists_passes_for_existing_files(self):
+        with tempfile.NamedTemporaryFile() as train, tempfile.NamedTemporaryFile() as test:
+            pipeline_api.check_dataset_exists(train.name, test.name)
+
+    @patch("pipeline_api.call_selector")
+    @patch("pipeline_api.check_dataset_exists")
+    def test_run_selector_builds_experiment_config(self, mock_check_dataset, mock_call_selector):
+        state = pipeline_api.run_selector(
+            algorithm=["IForest"],
+            dataset_train="./data/glass_train.mat",
+            dataset_test="./data/glass_test.mat",
+            parameters={"contamination": 0.1},
+        )
+
+        self.assertEqual(state["experiment_config"]["algorithm"], ["IForest"])
+        self.assertEqual(state["experiment_config"]["dataset_train"], "./data/glass_train.mat")
+        self.assertEqual(state["experiment_config"]["dataset_test"], "./data/glass_test.mat")
+        self.assertEqual(state["experiment_config"]["parameters"], {"contamination": 0.1})
+        mock_check_dataset.assert_called_once_with("./data/glass_train.mat", "./data/glass_test.mat")
+        mock_call_selector.assert_called_once()
+
+    def test_run_info_miner_requires_algorithm_and_package(self):
+        with self.assertRaises(ValueError):
+            pipeline_api.run_info_miner("", "pyod")
+
 
 if __name__ == "__main__":
-    # Ensure API key is set before running
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("OPENAI_API_KEY is not set. Set it before running.")
-    main()
+    unittest.main()
