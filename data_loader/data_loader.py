@@ -1,6 +1,7 @@
 import openai
 import os
 import re
+import time
 
 import sklearn
 # from orion.data import load_signal
@@ -11,19 +12,39 @@ class DataLoader:
     A class to load various file formats (.mat, .csv, .json, etc.) and extract data.
     """
 
-    def __init__(self, filepath, desc='', store_script = False, store_path = 'generated_data_loader.py'):
+    def __init__(
+        self,
+        filepath,
+        desc='',
+        store_script=False,
+        store_path='generated_data_loader.py',
+        max_retries=3,
+        retry_interval=1.0,
+    ):
         """
         Initialize DataLoader with the path to the file.
         """
         self.filepath = filepath
         self.desc = desc
+        self.max_retries = max_retries
+        self.retry_interval = retry_interval
 
         self.X_name = 'X'
         self.y_name = 'y'
 
 
-        if not os.path.exists(self.filepath):
-            raise FileNotFoundError(f"File not found: {self.filepath}")
+        attempt = 0
+        while attempt < self.max_retries:
+            if os.path.exists(self.filepath):
+                break
+            attempt += 1
+            print(f"⚠️ File not found (attempt {attempt}/{self.max_retries}): {self.filepath}")
+            if attempt < self.max_retries:
+                time.sleep(self.retry_interval)
+        else:
+            raise FileNotFoundError(
+                f"File not found after {self.max_retries} attempts: {self.filepath}"
+            )
         
         self.store_script = store_script
         self.store_path = store_path
@@ -265,22 +286,28 @@ Do not generate if statment code for file type because file type is already give
 
         # print("Head Script:\n", head_script)
         
-        local_namespace = {}
-        try:
-            # Execute the generated script safely
-            exec(head_script, local_namespace)
-            
-            # Retrieve head from the executed script
-            head = local_namespace.get("head")
-
-            # Print the extracted data
-            if head is not None:
-                # print("✅ Extracted head:\n", head)
-                self.head = head
-            else:
-                print("⚠️ Warning: 'head' not found in the file.")
-        except Exception as e:
-            print(f"❌ Error executing the generated script: {e}")
+        head = None
+        head_attempt = 0
+        while head_attempt < self.max_retries:
+            local_namespace = {}
+            try:
+                exec(head_script, local_namespace)
+                head = local_namespace.get("head")
+                if head is not None:
+                    self.head = head
+                    break
+                print(
+                    f"⚠️ Warning: 'head' not found (attempt {head_attempt + 1}/{self.max_retries})."
+                )
+            except Exception as e:
+                print(
+                    f"❌ Error executing head script (attempt {head_attempt + 1}/{self.max_retries}): {e}"
+                )
+            head_attempt += 1
+            if head_attempt < self.max_retries:
+                time.sleep(self.retry_interval)
+        else:
+            print(f"❌ Exceeded max retries ({self.max_retries}) while loading head. Quit.")
             return None, None
 
         # ## determine if the head is time series
@@ -299,13 +326,16 @@ Do not generate if statment code for file type because file type is already give
         # Create a controlled execution namespace
         local_namespace = {}
 
-        try:
-            # Execute the generated script safely
-            exec(generated_script, local_namespace, local_namespace)
-            
-            # Retrieve X and y from the executed script
-            X = local_namespace.get("X")
-            y = local_namespace.get("y")
+        exec_attempt = 0
+        while exec_attempt < self.max_retries:
+            local_namespace = {}
+            try:
+                # Execute the generated script safely
+                exec(generated_script, local_namespace, local_namespace)
+                
+                # Retrieve X and y from the executed script
+                X = local_namespace.get("X")
+                y = local_namespace.get("y")
 
 
             # Print the extracted data
@@ -314,18 +344,17 @@ Do not generate if statment code for file type because file type is already give
             # else:
             #     print("⚠️ Warning: 'X' not found in the file.")
             
-            if type(y) is str and y == 'graph':
-                return X, y
+                if type(y) is str and y == 'graph':
+                    return X, y
             
-            if type(y) is str and y == 'Unsupervised':
-                # print("✅ Extracted y as 'Unsupervised'.")
-                if split_data:
-                    return X, None, None, None
-                else:
-                    return X, None
+                if type(y) is str and y == 'Unsupervised':
+                    if split_data:
+                        return X, None, None, None
+                    else:
+                        return X, None
             
-            if 'tiemstamp' in self.head.lower() or 'time' in self.head.lower():
-                return X, 'time-series'
+                if 'tiemstamp' in self.head.lower() or 'time' in self.head.lower():
+                    return X, 'time-series'
 
             # if y is not None:
             #     print("✅ Extracted y:\n", y)
@@ -333,30 +362,38 @@ Do not generate if statment code for file type because file type is already give
             #     print("⚠️ Warning: 'y' not found in the file.")
 
             # Reshape y properly
-            if y.shape[0] == 1 and y.shape[1] == X.shape[0]:  # If y is (1, N), reshape to (N, 1)
-                y = y.T  # Transpose to (N, 1)
+                if y.shape[0] == 1 and y.shape[1] == X.shape[0]:
+                    y = y.T
 
             # Convert y to 1D if required by train_test_split
-            if len(y.shape) > 1 and y.shape[1] == 1:
-                y = y.ravel()
+                if len(y.shape) > 1 and y.shape[1] == 1:
+                    y = y.ravel()
 
 
             # Ensure X and y now have matching samples
             
-            if split_data:
-                # Split the data into training and testing sets
-                if X.shape[0] != y.shape[0]:
-                    print(f"❌ Error: Mismatched samples. X has {X.shape[0]} rows, y has {y.shape[0]} rows.")
-                    return None, None, None, None
-                X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=42)
-                print("✅ Split data into training and testing sets.")
-                return X_train, X_test, y_train, y_test
-            else:
-                return X, y  # Return extracted data for further processing
-
-        except Exception as e:
-            print(f"❌ Error executing the generated script: {e}")
-            return None, None
+                if split_data:
+                    if X.shape[0] != y.shape[0]:
+                        print(
+                            f"❌ Error: Mismatched samples. X has {X.shape[0]} rows, y has {y.shape[0]} rows."
+                        )
+                        return None, None, None, None
+                    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(
+                        X, y, test_size=0.2, random_state=42
+                    )
+                    print("✅ Split data into training and testing sets.")
+                    return X_train, X_test, y_train, y_test
+                else:
+                    return X, y
+            except Exception as e:
+                print(
+                    f"❌ Error executing generated script (attempt {exec_attempt + 1}/{self.max_retries}): {e}"
+                )
+                exec_attempt += 1
+                if exec_attempt < self.max_retries:
+                    time.sleep(self.retry_interval)
+        print(f"❌ Exceeded max retries ({self.max_retries}) while loading data. Quit.")
+        return (None, None, None, None) if split_data else (None, None)
 
 
 

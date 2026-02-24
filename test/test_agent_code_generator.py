@@ -32,6 +32,33 @@ class TestAgentCodeGenerator(unittest.TestCase):
             )
         self.assertEqual(code, "print('x')")
 
+    def test_sanitize_tslib_args_removes_unsupported_and_normalizes_gpu_flag(self):
+        code = (
+            'cmd = ["python", "-u", "./Time-Series-Library/run.py", '
+            '"--model", "TimesNet", "--fc_dropout", "0.1", "--head_dropout", "0", '
+            '"--stride", "8", "--file_name", "MSL", "--use_gpu", "False"]'
+        )
+        out = AgentCodeGenerator._sanitize_tslib_args(code)
+
+        self.assertNotIn("--fc_dropout", out)
+        self.assertNotIn("--head_dropout", out)
+        self.assertNotIn("--stride", out)
+        self.assertNotIn("--file_name", out)
+        self.assertNotIn('"--use_gpu", "False"', out)
+        self.assertIn("--no_use_gpu", out)
+
+    def test_sanitize_tslib_args_rewrites_run_path_and_adds_cwd(self):
+        code = (
+            'import subprocess\n'
+            'cmd = ["python", "-u", "./Time-Series-Library/run.py", "--model", "TimesNet"]\n'
+            'subprocess.run(cmd)\n'
+        )
+        out = AgentCodeGenerator._sanitize_tslib_args(code)
+
+        self.assertIn('"run.py"', out)
+        self.assertNotIn('"./Time-Series-Library/run.py"', out)
+        self.assertIn('subprocess.run(cmd, cwd="./Time-Series-Library")', out)
+
 
 if __name__ == "__main__":
     unittest.main()
