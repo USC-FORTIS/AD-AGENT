@@ -189,7 +189,7 @@ class TestPipelineInterface(unittest.TestCase):
     @patch("pipeline_interface.CodeQuality", FakeCodeQuality)
     def test_call_reviewer_increments_review_count_on_error(self):
         class DummyReviewer:
-            def test_code(self, code, tool, package_name, n_features=None):
+            def test_code(self, code, tool, package_name, n_features=None, train_dataset=None):
                 return "error"
 
         state = pipeline_interface.build_state()
