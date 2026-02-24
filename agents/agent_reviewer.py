@@ -22,17 +22,15 @@ You will receive a Python script for {package_name} that trains an anomaly-detec
 TASK:
 1. Replace **all data-loading operations** (DataLoader, torch.load, np.load, pandas.read*, etc.)
    with code that creates SMALL synthetic data directly in the script:
-     • For PyOD: generate X_train, y_train, X_test, y_test using `generate_data`;
+    • For PyOD: generate X_train, y_train, X_test, y_test using `generate_data`; You need to make sure that the dimension of the features matches the training dataset {train_dataset}.
          `from pyod.utils.data import generate_data`
-         If {n_features} is provided (>0), set `n_features={n_features}`.
          Example:
          `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=n_features)`
-   • For PyGOD: build train and test graph follow instruction below;
+    • For PyGOD: build train and test graph follow instruction below; You need to make sure that the dimension of the features matches the training dataset {train_dataset}.
      `import torch`
      `from pygod.generator import gen_contextual_outlier, gen_structural_outlier`
      `from torch_geometric.data import Data`
-     `num_nodes = 200`  
-     `num_features = 16`  
+     `num_nodes = `  
      `x = torch.randn(num_nodes, num_features)`  
 
      `edge_index = torch.tensor([`  
@@ -43,7 +41,7 @@ TASK:
      `data, ya = gen_contextual_outlier(data, n=100, k=50)`  
      `data, ys = gen_structural_outlier(data, m=10, n=10)`  
      `data.y = torch.logical_or(ys, ya).long()`  
-   • For tslib:
+    • For tslib: You need to make sure that the dimension of the features matches the training dataset {train_dataset}.
      Do not generate any new code. 
      1. Just change the value of `--data` parameter to `MSL` and `--root_path` to `./data/unit_test`. Since I want to run unit test on the data called `MSL` rahter than origial data
      2.     "--seq_len", "10",
@@ -54,7 +52,7 @@ TASK:
         Set these three parameters to 10, 5, 0, 1, 55 respectively. This is for small data set unit test only
         You have to set `--enc_in` to 55 to match the data dimension. And chnage all dimention related parameters to 55
      3. if the algorithm ({algorithm_name}) is `ETSformer`, then set `--top_k` to 1 and `--c_out` to 55.
-   • For Darts:
+    • For Darts: You need to make sure that the dimension of the features matches the training dataset {train_dataset}.
 
     `import numpy as np`
     `import pandas as pd`
@@ -107,7 +105,7 @@ class AgentReviewer:
         code: str,
         algorithm_name: str,
         package_name: str,
-        n_features: int | None = None,
+        train_dataset: str | None = None,
     ) -> str:
         """
         Generate a test script using synthetic data and execute it.
@@ -120,7 +118,7 @@ class AgentReviewer:
                     "code": code,
                     "algorithm_name": algorithm_name,
                     "package_name": package_name,
-                    "n_features": n_features
+                    "train_dataset": train_dataset
                 })
             ).content
             test_script = self._clean_markdown(test_script)
@@ -186,7 +184,7 @@ print("preds:", preds[:10])
 """
 
     reviewer = AgentReviewer()
-    error = reviewer.test_code(code=sample_code, algorithm_name="IForest", package_name="pyod")
+    error = reviewer.test_code(code=sample_code, algorithm_name="IForest", package_name="pyod", train_dataset="./data/glass_train.mat")
     if error:
         print("Test failed:", error)
     else:

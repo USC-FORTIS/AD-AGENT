@@ -197,9 +197,10 @@ eg.
 
 You need to choose proper parameters for the model and add them to the command. Please note that for ETSformer, the encode layers and decode layers must be equal. `--e_layers` and `--d_layers` must be equal. For example, if you set `--e_layers 2`, you must set `--d_layers 2` as well.
 Do not add unsupported parameters such as '--mix' nor '--output_attention'. Please follow instruction in [DOCUMENTATION] to add parameters or the example above.
+Do not add the following parameters: `--fc_dropout`, `--head_dropout`, `--stride`.
                                                       
 Set `--gpu_type` to `cpu`
-Set '--use_gpu' to 'False'
+Use only `--no_use_gpu` (flag style). Do NOT pass a value to `--use_gpu`.
                                                       
 Avoid adding the following parameters:
 --use_amp, --use_multi_gpu, --itr
@@ -391,7 +392,10 @@ class AgentCodeGenerator:
                 "parameters": str(input_parameters)
             })
         ).content
-        return self._clean(raw)
+        cleaned = self._clean(raw)
+        if package_name == "tslib":
+            cleaned = self._sanitize_tslib_args(cleaned)
+        return cleaned
 
     # -------- revision (moved from old Reviewer) --------
     def revise_code(self, code_quality: CodeQuality, algorithm_doc: str) -> str:
@@ -405,13 +409,66 @@ class AgentCodeGenerator:
         ).content
         # increase review counter here
         code_quality.review_count += 1
-        return self._clean(fixed)
+        cleaned = self._clean(fixed)
+        return self._sanitize_tslib_args(cleaned)
 
     # -------- util --------
     @staticmethod
     def _clean(code: str) -> str:
         code = re.sub(r"```(python)?", "", code)
         return re.sub(r"```", "", code).strip()
+
+    @staticmethod
+    def _sanitize_tslib_args(code: str) -> str:
+        """
+        Remove known unsupported tslib CLI args and normalize GPU flags.
+        This is a post-generation safety net for run.py argparse compatibility.
+        """
+        if "Time-Series-Library/run.py" not in code:
+            return code
+
+        # Remove unsupported argument/value pairs when present in cmd lists.
+        for arg in ("fc_dropout", "head_dropout", "stride", "file_name"):
+            code = re.sub(
+                rf',\s*["\']--{arg}["\']\s*,\s*["\'][^"\']*["\']',
+                "",
+                code,
+            )
+
+        # Convert `--use_gpu`, "False" into `--no_use_gpu`.
+        code = re.sub(
+            r',\s*["\']--use_gpu["\']\s*,\s*["\']False["\']',
+            ', "--no_use_gpu"',
+            code,
+            flags=re.IGNORECASE,
+        )
+        # Handle lowercase false if unquoted token sneaks in list.
+        code = re.sub(
+            r',\s*["\']--use_gpu["\']\s*,\s*False',
+            ', "--no_use_gpu"',
+            code,
+        )
+
+        # Ensure run.py is referenced relative to the Time-Series-Library cwd.
+        code = code.replace("./Time-Series-Library/run.py", "run.py")
+
+        # Ensure run.py executes inside Time-Series-Library so exp_basic can find ./models.
+        # Covers both `subprocess.run(cmd)` and `subprocess.run(cmd, ...)` forms.
+        if "subprocess.run(cmd" in code:
+            def _add_cwd_if_missing(m):
+                args = m.group(1) or ""
+                if "cwd=" in args:
+                    return m.group(0)
+                if args.strip():
+                    return f'subprocess.run(cmd,{args}, cwd="./Time-Series-Library")'
+                return 'subprocess.run(cmd, cwd="./Time-Series-Library")'
+
+            code = re.sub(
+                r"subprocess\.run\(\s*cmd\s*(?:,\s*([^)]*))?\)",
+                _add_cwd_if_missing,
+                code,
+            )
+        return code
     @staticmethod
     def _extract_init_params_dict(response_text: str) -> dict:
         """

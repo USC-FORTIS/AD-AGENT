@@ -38,8 +38,6 @@ class FullToolState(TypedDict):
     experiment_config: dict | None
     results         : List[Tuple[str, Any]] | None
     algorithm_doc   : str | None
-    n_features     : int | None
-    
 
 # Ensure API key is available
 os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
@@ -75,7 +73,6 @@ def build_state() -> Dict[str, Any]:
         "experiment_config": None,
         "results": None,
         "algorithm_doc": None,
-        "n_features": None,
     }
 
 # ------------------------------------------------------------------
@@ -177,7 +174,6 @@ def call_selector(state: FullToolState) -> dict:
         data_path_train = selector.data_path_train,
         data_path_test  = selector.data_path_test,
         package_name    = selector.package_name,
-        n_features     = selector.n_features,
         # vectorstore     = selector.vectorstore
     )
     print("\n=== [Selector] Selection complete ===")
@@ -330,7 +326,6 @@ def call_code_generator_for_single_tool(state: FullToolState) -> dict:
 def run_reviewer(
     code_quality: Optional[CodeQuality] = None,
     tool: Optional[str] = None,
-    n_features: int = 2,
     state: FullToolState = None
 ) -> Dict[str, Any]:
     """
@@ -342,12 +337,11 @@ def run_reviewer(
         CodeQuality object to review.
     tool : str
         Algorithm/tool name.
-    n_features : int, optional
         Feature dimension for synthetic data (default is 2), which 
         should be the dimension of the training data.
     state : FullToolState, optional
         Existing pipeline state to reuse. If None, a new state is created from
-        `code_quality`, `tool`, and `n_features`.
+        `code_quality` and `tool`.
 
     Returns
     -------
@@ -363,7 +357,6 @@ def run_reviewer(
     state = build_state()
     state["current_tool"] = tool
     state["code_quality"] = code_quality
-    state["n_features"] = n_features
     result = call_reviewer_for_single_tool(state)
     
     # print(f"Reviewer result for {tool}: AUROC={result_cq.auroc}, AUPRC={result_cq.auprc}, Error Points={result_cq.error_points}, Error Message={result_cq.error_message}")
@@ -380,7 +373,7 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
         cq.code,
         tool,
         state["package_name"],
-        n_features=state.get("n_features"),
+        train_dataset=state["data_path_train"]
     )
 
     if cq.error_message:
@@ -397,7 +390,6 @@ def run_codegenerator_reviewer_loop(
     data_path_test: Optional[str] = None,
     input_parameters: Optional[dict] = None,
     max_reviews: int = 2,
-    n_features: int = 2,
 ) -> Dict[str, Any]:
     """
     Loop reviewer + code generation until success or max reviews.
@@ -418,9 +410,6 @@ def run_codegenerator_reviewer_loop(
         Additional parameters for code generation.
     max_reviews : int, optional
         Maximum number of review cycles (default is 2).
-    n_features : int, optional
-        Feature dimension for synthetic data (default is 2), which 
-        should be the dimension of the training data.
 
     Returns
     -------
@@ -431,7 +420,7 @@ def run_codegenerator_reviewer_loop(
     cq: Optional[CodeQuality] = None
     while True:
         cq = run_code_generator(tool, data_path_train, algorithm_doc, package_name, data_path_test, input_parameters, cq)
-        cq = run_reviewer(cq, tool, n_features)
+        cq = run_reviewer(cq, tool)
         if not cq["code_quality"].error_message or cq["code_quality"].review_count >= max_reviews:
             break
     print(f"Final code quality after {cq['code_quality'].review_count} reviews: AUROC={cq['code_quality'].auroc}, AUPRC={cq['code_quality'].auprc}, Error Points={cq['code_quality'].error_points}")

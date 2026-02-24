@@ -19,7 +19,6 @@ class AgentSelector:
       self.data_path_train = user_input['dataset_train']
       self.data_path_test = user_input['dataset_test']
       self.user_input = user_input
-      self.n_features = None
       self.algorithm = None
 
       # if user_input['dataset_train'].endswith(".pt"):
@@ -53,10 +52,6 @@ class AgentSelector:
       self.X_train = X_train
       self.y_train = y_train
       print(f"Loaded training data from {train_path}. X_train shape: {getattr(X_train, 'shape', 'N/A')}, y_train shape: {getattr(y_train, 'shape', 'N/A')}")
-      print(f"Dimension: {X_train.shape[1]}")
-      
-      self.n_features = X_train.shape[1]
-
       # Only load test data if test_path is provided and not empty
       if test_path and os.path.exists(test_path):
           test_loader = DataLoader(test_path, store_script=True, store_path='test_data_loader.py')
@@ -108,23 +103,31 @@ class AgentSelector:
           messages = generate_model_selection_prompt_from_pygod(name, num_node, num_edge, num_feature, avg_degree)
           content = query_openai(messages, model="o4-mini")
           algorithm = json.loads(content)["choice"]
-          # print(f"Algorithm: {algorithm}")
+          print(f"Algorithm: {algorithm}")
         else: # for time series data
           if self.X_train is not None and type(self.X_train) is not str:
             print('Shape of X_train:', self.X_train.shape)
+            dim = 1
             if len(self.X_train.shape) > 1:
               num_features = self.X_train.shape[1]
               self.parameters['enc_in'] = num_features
+              dim = num_features
+            ts_type = "multivariate" if dim > 1 else "univariate"
             
             num_signals = len(self.X_train)
-            messages = generate_model_selection_prompt_from_timeseries(name, num_signals)
+            messages = generate_model_selection_prompt_from_timeseries(
+              name,
+              num_signals,
+              dim,
+              ts_type
+            )
             content = query_openai(messages, model="o4-mini")
             algorithm = json.loads(content)["choice"]
             print(f"Algorithm: {algorithm}")
           else:
             algorithm = 'Autoformer'
-        self.algorithm = algorithm
-        self.tools = algorithm
+        self.algorithm = [algorithm]
+        self.tools = [algorithm]
 
         print('Selector Parameters:', self.parameters)
         
