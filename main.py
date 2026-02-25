@@ -1,5 +1,12 @@
-import logging, sys, operator, asyncio, os
+import logging, sys, operator, asyncio, os, argparse
 from typing import TypedDict, Annotated, Sequence, List, Tuple, Any
+
+# --- Parse --sandbox BEFORE any agent/sandbox imports (they read env at import time) ---
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--sandbox", choices=["modal", "docker"], default=None)
+_known, _ = _parser.parse_known_args()
+if _known.sandbox:
+    os.environ["OPENAD_SANDBOX"] = _known.sandbox
 
 from config.config import Config
 os.environ["OPENAI_API_KEY"] = Config.OPENAI_API_KEY

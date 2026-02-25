@@ -1,0 +1,14 @@
+# AD-AGENT Settings
+
+system:
+  sandbox_mode: "modal"  # modal | docker
+  timeout_seconds: 60
+  max_retries: 2
+
+llm:
+  default_provider: "bedrock"
+  bedrock:
+    model_id: "meta.llama3-1-70b-instruct-v1:0"
+    region: "us-west-2"
+  openai:
+    model: "gpt-4o"

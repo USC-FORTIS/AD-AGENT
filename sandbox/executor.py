@@ -1,5 +1,6 @@
 import os
 import subprocess
+import tempfile
 
 from sandbox.config import SANDBOX_MODE, MODAL_APP_NAME, DEFAULT_TIMEOUT
 
@@ -12,12 +13,12 @@ def execute_code(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> tuple[str, str, int]:
     """
-    Execute a Python script in either a Modal Sandbox or locally via subprocess.
+    Execute a Python script in a Modal Sandbox, Docker container, or locally.
 
     Args:
         code: Python source code to execute.
-        algorithm_name: Name of the algorithm (used for script naming in local mode).
-        package_name: Package name to select the right Modal image.
+        algorithm_name: Name of the algorithm (used for script naming).
+        package_name: Package name to select the right image.
         data_files: Optional dict mapping {remote_path: local_path} for files to
                     upload into the sandbox before execution.
         timeout: Max execution time in seconds.
@@ -28,7 +29,7 @@ def execute_code(
     if SANDBOX_MODE == "modal":
         return _execute_modal(code, algorithm_name, package_name, data_files, timeout)
     else:
-        return _execute_locally(code, algorithm_name, package_name, timeout)
+        return _execute_docker(code, algorithm_name, package_name, data_files, timeout)
 
 
 def _execute_modal(
@@ -90,27 +91,55 @@ def _execute_modal(
         sandbox.terminate()
 
 
-def _execute_locally(
+def _execute_docker(
     code: str,
     algorithm_name: str,
     package_name: str,
+    data_files: dict[str, str] | None,
     timeout: int,
 ) -> tuple[str, str, int]:
-    """Execute code locally using subprocess (fallback / development mode)."""
-    folder = "./generated_scripts"
-    os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, f"{algorithm_name}.py")
-
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(code)
+    """Execute code inside a Docker container."""
+    from sandbox.docker_images import ensure_image
 
     try:
+        image_tag = ensure_image(package_name)
+    except (ValueError, RuntimeError) as e:
+        return "", f"[ERROR] {e}", 1
+
+    # Write code to a temp file
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", prefix=f"{algorithm_name}_", delete=False
+    )
+    try:
+        tmp.write(code)
+        tmp.close()
+
+        cmd = [
+            "docker", "run", "--rm",
+            "--memory=4g", "--cpus=2",
+            "-v", f"{tmp.name}:/workspace/script.py:ro",
+        ]
+
+        # Mount data files read-only
+        if data_files:
+            for remote_path, local_path in data_files.items():
+                abs_local = os.path.abspath(local_path)
+                if os.path.exists(abs_local):
+                    cmd.extend(["-v", f"{abs_local}:{remote_path}:ro"])
+
+        cmd.extend([image_tag, "python", "/workspace/script.py"])
+
         result = subprocess.run(
-            ["python", path],
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout,
         )
         return result.stdout, result.stderr, result.returncode
+
     except subprocess.TimeoutExpired:
-        return "", "[ERROR] Execution timed out.", 1
+        return "", "[ERROR] Docker execution timed out.", 1
+    finally:
+        os.unlink(tmp.name)
+
+

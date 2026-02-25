@@ -1,0 +1,6 @@
+FROM python:3.10-slim
+RUN pip install --no-cache-dir torch numpy pandas scikit-learn
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN git clone https://github.com/thuml/Time-Series-Library.git /opt/Time-Series-Library
+ENV PYTHONPATH="/opt/Time-Series-Library:${PYTHONPATH}"
+WORKDIR /workspace
