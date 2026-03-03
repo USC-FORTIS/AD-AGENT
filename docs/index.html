@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AD-AGENT | Multi-Agent Anomaly Detection</title>
+  <meta name="description" content="AD-AGENT is an LLM-driven multi-agent anomaly detection platform for end-to-end workflows across tabular, graph, and time-series data." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Poppins:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./site.css" />
+</head>
+<body>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <header class="shell">
+    <nav class="top-nav">
+      <a class="brand" href="#top">AD-AGENT</a>
+      <div class="links">
+        <a href="#overview">Overview</a>
+        <a href="#features">Features</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#quickstart">Quickstart</a>
+      </div>
+      <a class="btn ghost" href="https://github.com/USC-FORTIS/AD-AGENT" target="_blank" rel="noreferrer">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top" class="shell">
+    <section class="hero reveal">
+      <p class="eyebrow">LLM-Driven Research Engineering</p>
+      <h1>End-to-end anomaly detection from one command.</h1>
+      <p class="lead">
+        AD-AGENT turns natural-language requests into runnable anomaly detection pipelines across
+        PyOD, PyGOD, and time-series libraries, with automated review and evaluation.
+      </p>
+      <p class="support-chip">
+        Supported by NSF POSE Phase II OpenAD (Award #2346158)
+      </p>
+      <div class="actions">
+        <a class="btn solid" href="#quickstart">Get Started</a>
+        <a class="btn ghost" href="https://arxiv.org/abs/2505.12594" target="_blank" rel="noreferrer">Read Paper</a>
+      </div>
+      <div class="stat-grid">
+        <article>
+          <h3>3 modalities</h3>
+          <p>Tabular, graph, and time series</p>
+        </article>
+        <article>
+          <h3>Multi-agent</h3>
+          <p>Processor, Selector, Generator, Reviewer, Evaluator</p>
+        </article>
+        <article>
+          <h3>Automation</h3>
+          <p>Parse, select, codegen, test, and run</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="overview" class="panel reveal">
+      <h2>What It Does</h2>
+      <p>
+        AD-AGENT is a multi-agent framework for anomaly detection lifecycle automation:
+        user intent parsing, model selection, documentation mining, executable code generation,
+        synthetic-data validation, and real-data evaluation.
+      </p>
+    </section>
+
+    <section id="features" class="panel reveal">
+      <h2>Core Features</h2>
+      <div class="card-grid">
+        <article class="card">
+          <h3>Natural-language Interface</h3>
+          <p>Write commands like: <code>Run IForest on ./data/glass_train.mat and ./data/glass_test.mat</code>.</p>
+        </article>
+        <article class="card">
+          <h3>Cross-library Support</h3>
+          <p>Supports PyOD (tabular), PyGOD (graph), and TSLib/Darts (time-series).</p>
+        </article>
+        <article class="card">
+          <h3>Self-checking Pipeline</h3>
+          <p>Generated code is reviewed on synthetic data before real execution.</p>
+        </article>
+        <article class="card">
+          <h3>Metric-driven Output</h3>
+          <p>Reports AUROC/AUPRC and failure points for transparent evaluation.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow" class="panel reveal">
+      <h2>Workflow</h2>
+      <ol class="flow">
+        <li><span>1</span>Processor extracts algorithms, datasets, and params from user command.</li>
+        <li><span>2</span>Selector infers data modality and selects AD library/tools.</li>
+        <li><span>3</span>InfoMiner queries authoritative docs and model usage details.</li>
+        <li><span>4</span>CodeGenerator creates runnable scripts and revises on errors.</li>
+        <li><span>5</span>Reviewer tests on synthetic data; Evaluator runs on real data.</li>
+      </ol>
+    </section>
+
+    <section id="quickstart" class="panel reveal">
+      <h2>Quickstart</h2>
+      <pre><code>git clone git@github.com:USC-FORTIS/AD-AGENT.git
+cd AD-AGENT
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py</code></pre>
+      <p class="mono">Parallel mode: <code>python main.py -p</code> | Optimizer mode: <code>python main.py -o</code></p>
+    </section>
+
+    <section class="panel reveal">
+      <h2>Citation</h2>
+      <p>If this project helps your work, cite the paper:</p>
+      <pre><code>@article{yang2025ad,
+  title={AD-AGENT: A Multi-agent Framework for End-to-end Anomaly Detection},
+  author={Yang, Tiankai and Liu, Junjun and ... and Zhao, Yue},
+  journal={arXiv preprint arXiv:2505.12594},
+  year={2025}
+}</code></pre>
+    </section>
+
+    <section class="panel reveal" id="support">
+      <h2>Support</h2>
+      <p>
+        This project is supported by the U.S. National Science Foundation (NSF), TIP POSE program:
+        <strong>NSF POSE: Phase II: OpenAD: An Integrated Open-Source Ecosystem for Anomaly Detection</strong>.
+      </p>
+      <p class="support-meta">
+        Award ID: <strong>2346158</strong> | Status: Active | Period: Jun 15, 2024 - May 31, 2027
+      </p>
+      <p class="support-meta">
+        Lead institution: University of Illinois at Chicago. Partners: Illinois Institute of Technology,
+        Lehigh University, University of Southern California.
+      </p>
+      <p class="support-meta">
+        NSF Program Director: Florence Rabanal.
+        <a href="https://www.nsf.gov/awardsearch/showAward?AWD_ID=2346158" target="_blank" rel="noreferrer">Award page</a>
+      </p>
+      <div class="sponsors-section">
+        <div class="sponsor-logos">
+          <a class="sponsor-logo" href="https://www.nsf.gov/" target="_blank" rel="noreferrer">
+            <img
+              class="sponsor-img"
+              src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxf6vjSiSCRCDQUItjOnrBEH4PjlLOsobFeg&s"
+              alt="National Science Foundation Logo"
+            />
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="shell footer">
+    <p>AD-AGENT project page. Supported by NSF Award #2346158.</p>
+    <a href="https://github.com/USC-FORTIS/AD-AGENT" target="_blank" rel="noreferrer">Repository</a>
+  </footer>
+
+  <script src="./site.js"></script>
+</body>
+</html>

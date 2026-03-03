@@ -1,0 +1,358 @@
+:root {
+  --bg: #f7f7f8;
+  --text: #1f2630;
+  --muted: #4e5968;
+  --panel: rgba(255, 255, 255, 0.92);
+  --line: rgba(31, 38, 48, 0.14);
+  --accent: #990000;
+  --accent-2: #2b5597;
+  --shadow: 0 18px 38px rgba(31, 38, 48, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 10% 15%, rgba(153, 0, 0, 0.08), transparent 32%),
+    radial-gradient(circle at 88% 12%, rgba(43, 85, 151, 0.12), transparent 28%),
+    linear-gradient(180deg, #f8f9fb 0%, #eef2f9 100%);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.bg-glow {
+  position: fixed;
+  width: 34rem;
+  height: 34rem;
+  border-radius: 50%;
+  filter: blur(55px);
+  z-index: -1;
+}
+
+.bg-glow-a {
+  background: rgba(153, 0, 0, 0.18);
+  top: -10rem;
+  left: -10rem;
+}
+
+.bg-glow-b {
+  background: rgba(43, 85, 151, 0.18);
+  right: -8rem;
+  bottom: -9rem;
+}
+
+.shell {
+  width: min(1080px, 92vw);
+  margin: 0 auto;
+}
+
+.top-nav {
+  margin-top: 1.2rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(7px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.brand {
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.links {
+  display: flex;
+  gap: 1rem;
+}
+
+.links a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+a {
+  color: var(--accent-2);
+}
+
+.hero {
+  padding: 5rem 0 2rem;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  margin: 1rem 0 0.8rem;
+  font-size: clamp(2.1rem, 6vw, 4.2rem);
+  line-height: 1.05;
+  max-width: 16ch;
+}
+
+.lead {
+  font-size: clamp(1rem, 1.9vw, 1.22rem);
+  color: var(--muted);
+  max-width: 65ch;
+}
+
+.actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.support-chip {
+  display: inline-block;
+  margin-top: 0.9rem;
+  margin-bottom: 0;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.btn {
+  display: inline-block;
+  padding: 0.62rem 1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn.solid {
+  background: linear-gradient(95deg, var(--accent) 0%, #b11515 100%);
+  color: #fff;
+}
+
+.btn.ghost {
+  border-color: var(--line);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.stat-grid {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.stat-grid article,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.stat-grid article {
+  padding: 1rem;
+}
+
+.stat-grid h3 {
+  margin: 0;
+  font-size: 1.04rem;
+}
+
+.stat-grid p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.panel {
+  margin-top: 1rem;
+  padding: 1.15rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.6rem;
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+.panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.support-meta {
+  margin-top: 0.55rem !important;
+}
+
+.card-grid {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.95rem;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.card h3 {
+  margin: 0 0 0.45rem;
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 1.02rem;
+}
+
+.card p {
+  margin: 0;
+}
+
+code,
+.mono {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+pre {
+  margin: 0.4rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem;
+  overflow: auto;
+  background: #fcfcfd;
+}
+
+.flow {
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.flow li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.flow span {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-2);
+  color: #fff;
+  font-size: 0.84rem;
+}
+
+.sponsors-section {
+  padding: 1.4rem 0 0.2rem;
+  text-align: center;
+}
+
+.sponsor-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 0.8rem;
+}
+
+.sponsor-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 220px;
+  height: 110px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sponsor-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+}
+
+.footer {
+  padding: 2.2rem 0 2.8rem;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+.footer a {
+  color: var(--text);
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 500ms ease, transform 500ms ease;
+}
+
+@media (max-width: 860px) {
+  .links {
+    display: none;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .sponsor-logo {
+    width: 170px;
+    height: 90px;
+  }
+}
