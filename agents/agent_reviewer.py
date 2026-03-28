@@ -10,7 +10,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 from langchain_openai import ChatOpenAI
@@ -127,6 +126,16 @@ class AgentReviewer:
 
     def __init__(self):
         pass
+
+    @staticmethod
+    def _import_pandas():
+        try:
+            import pandas as pd
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "pandas is required only when inferring TSLib synthetic data from CSV inputs."
+            ) from exc
+        return pd
 
     def test_code(
         self,
@@ -348,12 +357,14 @@ class AgentReviewer:
             if arr.ndim >= 2:
                 return int(arr.shape[1])
         if suffix == ".csv":
+            pd = self._import_pandas()
             df = pd.read_csv(train_path, nrows=8)
             return max(1, len(self._infer_feature_columns(df)))
         raise ValueError(f"Unsupported tslib train file format: {train_path.suffix}")
 
     @staticmethod
-    def _infer_feature_columns(df: pd.DataFrame) -> list[str]:
+    def _infer_feature_columns(df) -> list[str]:
+        pd = AgentReviewer._import_pandas()
         lowered = {c.lower(): c for c in df.columns}
         excluded = {
             lowered[c]
@@ -371,6 +382,7 @@ class AgentReviewer:
         if not path or not path.exists() or path.suffix.lower() != ".csv":
             return False
         try:
+            pd = AgentReviewer._import_pandas()
             df = pd.read_csv(path, nrows=5)
         except Exception:
             return False
