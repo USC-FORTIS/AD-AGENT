@@ -12,6 +12,7 @@ from agents.agent_reviewer import AgentReviewer
 from agents.agent_evaluator import AgentEvaluator
 from agents.agent_optimizer import AgentOptimizer
 from entity.code_quality import CodeQuality
+from utils.tslib_setup import prepare_tslib_repo
 
 from langchain_openai          import ChatOpenAI
 
@@ -295,6 +296,8 @@ def run_code_generator(
 def call_code_generator_for_single_tool(state: FullToolState) -> dict:
     code_generator = state["agent_code_generator"]
     tool  = state["current_tool"]
+    if state["package_name"] == "tslib":
+        prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
 
     # generate code || revise code
     if state["code_quality"] is None:

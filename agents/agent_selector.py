@@ -33,6 +33,8 @@ class AgentSelector:
 
       # Change Order
       # Logic Problem
+
+      # TODO: add meta info
       self.load_data(self.data_path_train, self.data_path_test)
 
       self.tools = None

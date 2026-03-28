@@ -185,3 +185,6 @@ cache.json
 cache.json.lock
 head_train_data_loader.py
 head_test_data_loader.py
+/config/config.py
+/dataset
+/Time-Series-Library

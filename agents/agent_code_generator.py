@@ -1,13 +1,13 @@
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
+import ast
+import os
 import re
 import sys
-import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 import subprocess
 from datetime import datetime, timedelta
-import ast
 from config.config import Config
 os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
 
@@ -143,12 +143,13 @@ IMPORTANT:
 """)
 
 template_fix = PromptTemplate.from_template("""
-You are an expert Python developer with deep experience in anomaly detection libraries.
+You are an expert Python developer fixing an anomaly-detection Python script.
 
 Here is the original code that raised an error:
 --- Original Code ---
 {code}
 
+Here is the execution error:
 --- Error Message ---
 {error_message}
 
@@ -158,71 +159,114 @@ Official documentation for `{algorithm}`:
 --- END DOCUMENTATION ---
 
 Task:
-1. Analyse the error and fix it strictly according to the doc.
-2. Output **executable** Python ONLY, no comments/explanations.
+1. Fix the code using the error message and the documentation.
+2. Output executable Python only.
+3. Make the smallest possible change that fixes the reported error.
+
+Strict rules:
+1. Preserve the overall script structure whenever possible.
+2. Do not rewrite the script from scratch unless the original code is fundamentally broken.
+3. Do not change `cwd` unless the error explicitly proves that the current working directory is wrong.
+4. If the script already uses `subprocess.run(cmd, check=True, cwd="./Time-Series-Library")`, keep it unchanged.
+5. Do not replace `run.py` with shell script paths such as `.sh`.
+6. Do not change paths to `scripts/...` unless the original code already used them.
+7. Do not invent unrelated path changes.
+8. If the error is about CUDA, GPU availability, or Torch GPU support, fix GPU-related command arguments instead of changing paths.
+9. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
+10. Keep all valid existing arguments unless the error indicates one of them is the cause.
+11. Do not introduce markdown fences, explanations, or comments.
+
+Return only executable Python code.
 """)
 
+
 template_tslib_labeled = PromptTemplate.from_template("""
-You are an expert Python developer with deep knowledge of the **Tslib** library for forecasting-based anomaly detection. Your task is to:
+You are an expert Python developer using **Time-Series-Library** for anomaly detection.
 
-1. Carefully study the official documentation excerpt for **`{algorithm}`** provided below so you fully understand how to initialise, fit, and use this class.          
-
+Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
 
 --- BEGIN DOCUMENTATION ---
 {algorithm_doc}
 --- END DOCUMENTATION ---
 
-This is how to use how we use the Tslib library for anomaly detection:
-```python
-import os
-import subprocess
+The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
 
-cmd = [
-    "python", "-u", "./Time-Series-Library/run.py",
-    "--task_name", "anomaly_detection",
-    "--is_training", "1",
-    "--root_path", "{data_path_train}",
-    "--model_id", "{data_path_train}",
-    "--model", "{algorithm}",
-    "--data", "project name of {data_path_train}", # if the data_path_train is ./data/MSL_train.npy, the project name is MSL
+Your job:
+1. Start from the official CLI arguments in the documentation for `{algorithm}`.
+2. Modify only the parameters that must change for the current task.
+3. Output Python code only, with no explanations, comments, or markdown fences.
 
-]
-1. You must use `{data_path_train}` as root_path. and for `--data` you need choose proper project name according to the `{data_path_train}`, the appdix of `{data_path_train}`
-eg.
-```
--- root_path ./data/MSL
--- data MSL
-```
-                                                      
+Required changes for the current task:
+1. Build a `cmd` list for:
+   - `"python", "-u", "run.py"`
+2. The script must execute `run.py` with:
+   - `check=True`
+   - `cwd="./Time-Series-Library"`
+3. Infer the dataset information from the provided file paths:
+   - train file: `{data_path_train}`
+   - test file: `{data_path_test}`
+4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset files and model `{algorithm}`.
+5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
 
-You need to choose proper parameters for the model and add them to the command. Please note that for ETSformer, the encode layers and decode layers must be equal. `--e_layers` and `--d_layers` must be equal. For example, if you set `--e_layers 2`, you must set `--d_layers 2` as well.
-Do not add unsupported parameters such as '--mix' nor '--output_attention'. Please follow instruction in [DOCUMENTATION] to add parameters or the example above.
-Do not add the following parameters: `--fc_dropout`, `--head_dropout`, `--stride`.
-                                                      
-Set `--gpu_type` to `cpu`
-Use only `--no_use_gpu` (flag style). Do NOT pass a value to `--use_gpu`.
-                                                      
-Avoid adding the following parameters:
---use_amp, --use_multi_gpu, --itr
-                                                      
+Environment requirement:
+- The generated script must run correctly in an environment where CUDA may be unavailable.
+- Do not rely on GPU availability.
+- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
+- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
 
-For `--dec_in`, `--enc_in`, and `c_out`, you need to set them according to the dataset name:
-- For MSL, set `--dec_in`, `--enc_in`, and `c_out` to 55
-- For SMAP, set `--dec_in`, `--enc_in`, and `c_out` to 25
-- For PSM, set `--dec_in`, `--enc_in`, and `c_out` to 25
-- For SMD, set `--dec_in`, `--enc_in`, and `c_out` to 38
-- For SWAT, set `--dec_in`, `--enc_in`, and `c_out` to 51
-                                                      
-Please set the following parameters to its input value, especially `--dec_in` and `--enc_in`:
-{parameters}
-You have to set these parameter as required.
-                                                      
+Constraints:
+1. Prefer the official arguments from the documentation over guessed defaults.
+2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
+3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
+4. At the top of the script, import `os` and `subprocess`.
+5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
 
-Output **only** executable Python code (no extra text) that performs forecasting-based anomaly detection.
-
-
-          
+Return one executable Python script and nothing else.
 """)
+
+template_tslib_unlabeled = PromptTemplate.from_template("""
+You are an expert Python developer using **Time-Series-Library** for anomaly detection.
+
+Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
+
+--- BEGIN DOCUMENTATION ---
+{algorithm_doc}
+--- END DOCUMENTATION ---
+
+The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
+
+Your job:
+1. Start from the official CLI arguments in the documentation for `{algorithm}`.
+2. Modify only the parameters that must change for the current task.
+3. Output Python code only, with no explanations, comments, or markdown fences.
+
+Required changes for the current task:
+1. Build a `cmd` list for:
+   - `"python", "-u", "run.py"`
+2. The script must execute `run.py` with:
+   - `check=True`
+   - `cwd="./Time-Series-Library"`
+3. Infer the dataset information from the provided input file path:
+   - input file: `{data_path_train}`
+4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset file and model `{algorithm}`.
+5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
+
+Environment requirement:
+- The generated script must run correctly in an environment where CUDA may be unavailable.
+- Do not rely on GPU availability.
+- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
+- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
+
+Constraints:
+1. Prefer the official arguments from the documentation over guessed defaults.
+2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
+3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
+4. At the top of the script, import `os` and `subprocess`.
+5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
+
+Return one executable Python script and nothing else.
+""")
+
 
 template_darts_labeled = PromptTemplate.from_template("""
 You are an expert Python developer with deep knowledge of the **Darts** library for forecasting-based time-series anomaly detection. Your task is to:
@@ -380,7 +424,7 @@ class AgentCodeGenerator:
         elif package_name == "pygod":
             tpl = template_pygod_labeled if data_path_test else template_pygod_unlabeled
         elif package_name == "tslib": # tslib only has labeled data
-            tpl = template_tslib_labeled 
+            tpl = template_tslib_labeled if data_path_test else template_tslib_unlabeled
         else:
             tpl = template_darts_labeled if data_path_test else template_darts_unlabeled
         raw = llm.invoke(
@@ -393,12 +437,15 @@ class AgentCodeGenerator:
             })
         ).content
         cleaned = self._clean(raw)
-        if package_name == "tslib":
-            cleaned = self._sanitize_tslib_args(cleaned)
+        # if package_name == "tslib":
+        #     cleaned = self._sanitize_tslib_args(cleaned)
+        print(f"Generated code: {cleaned}\n")
         return cleaned
 
     # -------- revision (moved from old Reviewer) --------
     def revise_code(self, code_quality: CodeQuality, algorithm_doc: str) -> str:
+        print("Error detected during execution. Attempting to fix the code...")
+        print("Error message:", code_quality.error_message)
         fixed = llm.invoke(
             template_fix.invoke({
                 "code": code_quality.code,
@@ -410,7 +457,9 @@ class AgentCodeGenerator:
         # increase review counter here
         code_quality.review_count += 1
         cleaned = self._clean(fixed)
-        return self._sanitize_tslib_args(cleaned)
+        # return self._sanitize_tslib_args(cleaned)
+        return cleaned
+
 
     # -------- util --------
     @staticmethod
@@ -424,7 +473,7 @@ class AgentCodeGenerator:
         Remove known unsupported tslib CLI args and normalize GPU flags.
         This is a post-generation safety net for run.py argparse compatibility.
         """
-        if "Time-Series-Library/run.py" not in code:
+        if "run.py" not in code:
             return code
 
         # Remove unsupported argument/value pairs when present in cmd lists.
@@ -448,9 +497,17 @@ class AgentCodeGenerator:
             ', "--no_use_gpu"',
             code,
         )
+        code = re.sub(
+            r',\s*["\']--use_gpu["\']\s*,\s*["\']false["\']',
+            ', "--no_use_gpu"',
+            code,
+            flags=re.IGNORECASE,
+        )
 
         # Ensure run.py is referenced relative to the Time-Series-Library cwd.
         code = code.replace("./Time-Series-Library/run.py", "run.py")
+
+        code = AgentCodeGenerator._ensure_tslib_required_args(code)
 
         # Ensure run.py executes inside Time-Series-Library so exp_basic can find ./models.
         # Covers both `subprocess.run(cmd)` and `subprocess.run(cmd, ...)` forms.
@@ -469,6 +526,7 @@ class AgentCodeGenerator:
                 code,
             )
         return code
+
     @staticmethod
     def _extract_init_params_dict(response_text: str) -> dict:
         """

@@ -43,7 +43,7 @@ from entity.code_quality       import CodeQuality
 
 def decide_next(state: FullToolState) -> dict:
     cq = state["code_quality"]
-    need_rerun = bool(cq.error_message) and cq.review_count < 2
+    need_rerun = bool(cq.error_message) and cq.review_count < 4
     return {"route": "code_generator" if need_rerun else "evaluator"}
 
 def route_selector(state: FullToolState):

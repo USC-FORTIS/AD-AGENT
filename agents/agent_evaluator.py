@@ -28,7 +28,15 @@ class AgentEvaluator:
         if res.returncode != 0:
             return CodeQuality(
                 code=code, algorithm=algorithm_name, parameters={}, std_output="",
-                error_message=res.stderr,
+                error_message=self._subprocess_output_as_error(res.stdout, res.stderr),
+                auroc=-1, auprc=-1, error_points=[], review_count=0
+            )
+
+        nested_error = self._detect_nested_failure(res.stdout, res.stderr)
+        if nested_error:
+            return CodeQuality(
+                code=code, algorithm=algorithm_name, parameters={}, std_output=res.stdout,
+                error_message=self._subprocess_output_as_error(res.stdout, res.stderr),
                 auroc=-1, auprc=-1, error_points=[], review_count=0
             )
 
@@ -62,3 +70,40 @@ class AgentEvaluator:
                     nums = [float(x.strip()) for x in m.group(1).split(",")]
                     pts.append({"point": nums, "true_label": float(m.group(2))})
         return pts
+
+    @staticmethod
+    def _detect_nested_failure(stdout: str, stderr: str) -> str:
+        combined = "\n".join(part for part in (stdout, stderr) if part)
+        if not combined.strip():
+            return ""
+        failure_markers = (
+            "Traceback (most recent call last):",
+            "NotImplementedError:",
+            "ModuleNotFoundError:",
+            "FileNotFoundError:",
+            "can't open file",
+            "CalledProcessError:",
+        )
+        for marker in failure_markers:
+            if marker in combined:
+                return combined
+        return ""
+
+    @staticmethod
+    def _subprocess_output_as_error(stdout: str, stderr: str) -> str:
+        stdout = (stdout or "").strip()
+        stderr = (stderr or "").strip()
+        combined = "\n".join(part for part in (stderr, stdout) if part).strip()
+        if not combined:
+            return "Subprocess failed with empty output."
+
+        lines = [line.strip() for line in combined.splitlines() if line.strip()]
+        for line in reversed(lines):
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*Error: ", line):
+                return line
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*Exception: ", line):
+                return line
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*: ", line):
+                return line
+
+        return combined
