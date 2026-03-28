@@ -120,6 +120,33 @@ class TestPipelineInterface(unittest.TestCase):
         self.assertIs(result, state)
         mock_call_selector.assert_called_once_with(state)
 
+    @patch("pipeline_interface.CodeQuality", new=FakeCodeQuality)
+    @patch("pipeline_interface.prepare_tslib_repo")
+    def test_call_code_generator_prepares_tslib_repo_for_tslib(self, mock_prepare):
+        class DummyGenerator:
+            def generate_code(self, **kwargs):
+                return "print('ok')"
+
+            def _extract_init_params_dict(self, text):
+                return {}
+
+        state = pipeline_interface.build_state()
+        state["agent_code_generator"] = DummyGenerator()
+        state["current_tool"] = "TimesNet"
+        state["data_path_train"] = "./data/MSL"
+        state["data_path_test"] = "./data/MSL"
+        state["algorithm_doc"] = "doc"
+        state["input_parameters"] = {}
+        state["package_name"] = "tslib"
+        state["code_quality"] = None
+
+        result = pipeline_interface.call_code_generator_for_single_tool(state)
+
+        self.assertEqual(result["code_quality"].code, "print('ok')")
+        mock_prepare.assert_called_once_with(
+            project_root="/Users/cici/Desktop/University/USC/research_2/AD-AGENT",
+        )
+
     def test_run_selector_missing_train_raises(self):
         state = pipeline_interface.build_state()
         state["experiment_config"] = {"dataset_train": None, "dataset_test": None}

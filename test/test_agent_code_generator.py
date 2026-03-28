@@ -32,6 +32,67 @@ class TestAgentCodeGenerator(unittest.TestCase):
             )
         self.assertEqual(code, "print('x')")
 
+    def test_generate_code_tslib_uses_official_script_params(self):
+        agent = AgentCodeGenerator()
+        with patch.object(
+            agent_code_generator_mod.llm,
+            "invoke",
+            return_value=types.SimpleNamespace(
+                content=(
+                    "```python\n"
+                    "import os\nimport subprocess\n"
+                    "cmd = [\"python\", \"-u\", \"./Time-Series-Library/run.py\", "
+                    "\"--task_name\", \"anomaly_detection\", \"--is_training\", \"1\", "
+                    "\"--root_path\", \"./dataset/MSL/\", \"--model\", \"LightTS\", "
+                    "\"--model_id\", \"./dataset/MSL/\", \"--use_gpu\", \"False\"]\n"
+                    "subprocess.run(cmd)\n```"
+                )
+            ),
+        ):
+            code = agent.generate_code(
+                algorithm="LightTS",
+                data_path_train="./data/MSL_train.npy",
+                data_path_test="./data/MSL_test.npy",
+                algorithm_doc="doc",
+                input_parameters={},
+                package_name="tslib",
+            )
+
+        self.assertIn("'--data'", code)
+        self.assertIn("'MSL'", code)
+        self.assertIn("'MSL_LightTS'", code)
+        self.assertIn("'--no_use_gpu'", code)
+
+    def test_tslib_prompt_mentions_official_doc_as_baseline(self):
+        rendered = agent_code_generator_mod.template_tslib_labeled.invoke(
+            {
+                "algorithm": "LightTS",
+                "data_path_train": "./data/MSL_train.npy",
+                "data_path_test": "./data/MSL_test.npy",
+                "algorithm_doc": "official doc",
+                "parameters": "{}",
+            }
+        ).to_string()
+
+        self.assertIn("Use those official arguments as the starting point", rendered)
+        self.assertIn('Apply user parameters from', rendered)
+        self.assertIn("train file", rendered)
+
+    def test_tsbad_prompt_formats(self):
+        rendered = agent_code_generator_mod.template_tsbad_labeled.invoke(
+            {
+                "algorithm": "IForest",
+                "data_path_train": "./data/yahoo_train.csv",
+                "data_path_test": "./data/yahoo_test.csv",
+                "algorithm_doc": "official tsbad doc",
+                "parameters": "{}",
+            }
+        ).to_string()
+
+        self.assertIn("TSB-AD", rendered)
+        self.assertIn("run_Unsupervise_AD", rendered)
+        self.assertIn("./data/yahoo_test.csv", rendered)
+
     def test_sanitize_tslib_args_removes_unsupported_and_normalizes_gpu_flag(self):
         code = (
             'cmd = ["python", "-u", "./Time-Series-Library/run.py", '
@@ -55,9 +116,28 @@ class TestAgentCodeGenerator(unittest.TestCase):
         )
         out = AgentCodeGenerator._sanitize_tslib_args(code)
 
-        self.assertIn('"run.py"', out)
+        self.assertIn("'run.py'", out)
         self.assertNotIn('"./Time-Series-Library/run.py"', out)
         self.assertIn('subprocess.run(cmd, cwd="./Time-Series-Library")', out)
+
+    def test_sanitize_tslib_args_adds_data_and_normalizes_gpu_and_model_id(self):
+        code = (
+            'import subprocess\n'
+            'cmd = ["python", "-u", "run.py", "--root_path", "./dataset/MSL_train.npy", '
+            '"--model", "LightTS", "--model_id", "./dataset/MSL_train.npy", "--use_gpu", "False"]\n'
+            'subprocess.run(cmd)\n'
+        )
+
+        out = AgentCodeGenerator._sanitize_tslib_args(code)
+
+        self.assertIn("'--data'", out)
+        self.assertIn("'MSL'", out)
+        self.assertIn("'MSL_LightTS'", out)
+        self.assertIn("'./dataset'", out)
+        self.assertNotIn("'./dataset/MSL_train.npy'", out)
+        self.assertNotIn('"--use_gpu", "False"', out)
+        self.assertIn("'--no_use_gpu'", out)
+        self.assertIn("'--gpu_type', 'cpu'", out)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,19 @@ class TestAgentEvaluator(unittest.TestCase):
         self.assertAlmostEqual(cq.auprc, 0.82)
         self.assertEqual(len(cq.error_points), 1)
 
+    def test_execute_code_detects_nested_failure_in_stdout(self):
+        evaluator = AgentEvaluator()
+        out = "Traceback (most recent call last):\nNotImplementedError: boom"
+        with patch(
+            "subprocess.run",
+            return_value=types.SimpleNamespace(returncode=0, stdout=out, stderr=""),
+        ):
+            cq = evaluator.execute_code("print('x')", "IForest")
+
+        self.assertEqual(cq.error_message, "NotImplementedError: boom")
+        self.assertEqual(cq.auroc, -1)
+        self.assertEqual(cq.auprc, -1)
+
 
 if __name__ == "__main__":
     unittest.main()
