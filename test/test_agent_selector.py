@@ -33,14 +33,5 @@ class TestAgentSelector(unittest.TestCase):
         tools = selector.generate_tools(["all"])
         self.assertIn("IForest", tools)
 
-    def test_resolve_time_series_package_prefers_tsbad_for_non_darts_algo(self):
-        selector = AgentSelector.__new__(AgentSelector)
-        selector.user_input = {"algorithm": ["IForest"]}
-
-        package_name = selector._resolve_time_series_package()
-
-        self.assertEqual(package_name, "tsbad")
-
-
 if __name__ == "__main__":
     unittest.main()

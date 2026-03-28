@@ -507,8 +507,6 @@ class AgentCodeGenerator:
         # Ensure run.py is referenced relative to the Time-Series-Library cwd.
         code = code.replace("./Time-Series-Library/run.py", "run.py")
 
-        code = AgentCodeGenerator._ensure_tslib_required_args(code)
-
         # Ensure run.py executes inside Time-Series-Library so exp_basic can find ./models.
         # Covers both `subprocess.run(cmd)` and `subprocess.run(cmd, ...)` forms.
         if "subprocess.run(cmd" in code:
