@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import types
@@ -144,7 +145,7 @@ class TestPipelineInterface(unittest.TestCase):
 
         self.assertEqual(result["code_quality"].code, "print('ok')")
         mock_prepare.assert_called_once_with(
-            project_root="/Users/cici/Desktop/University/USC/research_2/AD-AGENT",
+            project_root=os.path.dirname(os.path.abspath(pipeline_interface.__file__)),
         )
 
     def test_run_selector_missing_train_raises(self):
