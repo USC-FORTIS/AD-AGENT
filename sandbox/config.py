@@ -44,6 +44,7 @@ def _load_sandbox_mode() -> str:
 SANDBOX_MODE = _load_sandbox_mode()
 
 MODAL_APP_NAME = "openad-sandbox"
+MODAL_VOLUME_NAME = "openad-data"
 
 # Default execution timeout in seconds
 DEFAULT_TIMEOUT = 120

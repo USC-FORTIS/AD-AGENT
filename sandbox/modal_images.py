@@ -1,7 +1,7 @@
 from modal import Image
 
 PYOD_IMAGE = Image.debian_slim(python_version="3.10").pip_install(
-    "pyod", "numpy", "scikit-learn", "pandas"
+    "pyod", "numpy", "scikit-learn", "pandas", "scipy"
 )
 
 PYGOD_IMAGE = Image.debian_slim(python_version="3.10").pip_install(

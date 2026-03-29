@@ -6,6 +6,6 @@ class Config:
     # 'sk-REDACTED'
 
     # Sandbox configuration
-    SANDBOX_MODE = os.environ.get("OPENAD_SANDBOX", "modal")  # "modal" | "local"
+    SANDBOX_MODE = os.environ.get("OPENAD_SANDBOX", "modal")  # "modal" | "docker"
     MODAL_APP_NAME = "openad-sandbox"
     SANDBOX_DEFAULT_TIMEOUT = 120

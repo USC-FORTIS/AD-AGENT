@@ -1,0 +1,24 @@
+name: Python Unittest
+
+on:
+  push:
+    branches: [main, master, separate-clean]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy
+      - name: Run unittest
+        env:
+          OPENAI_API_KEY: test-key
+        run: |
+          python -m unittest discover -s test -p "test_*.py" -v
