@@ -114,8 +114,45 @@ class TestAgentInfoMiner(unittest.TestCase):
             cache_path = os.path.join(td, "cache.json")
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump({}, f)
+            fake_agents_dir = os.path.join(td, "agents")
+            fake_repo_dir = os.path.join(td, "Time-Series-Library")
+            scripts_dir = os.path.join(fake_repo_dir, "scripts", "anomaly_detection", "MSL")
+            os.makedirs(scripts_dir, exist_ok=True)
 
-            doc = agent.query_docs("LightTS", "tslib", cache_path=cache_path)
+            with open(os.path.join(fake_repo_dir, "run.py"), "w", encoding="utf-8") as f:
+                f.write(
+                    "import argparse\n"
+                    "parser = argparse.ArgumentParser()\n"
+                    "parser.add_argument('--task_name', type=str, required=True)\n"
+                    "parser.add_argument('--is_training', type=int, required=True)\n"
+                    "parser.add_argument('--root_path', type=str, default='./data/ETT/')\n"
+                    "parser.add_argument('--model_id', type=str, required=True)\n"
+                    "parser.add_argument('--model', type=str, required=True)\n"
+                    "parser.add_argument('--data', type=str, required=True)\n"
+                    "parser.add_argument('--features', type=str, default='M')\n"
+                    "parser.add_argument('--seq_len', type=int, default=96)\n"
+                    "parser.add_argument('--pred_len', type=int, default=96)\n"
+                    "parser.add_argument('--use_gpu', action='store_true', default=True)\n"
+                    "parser.add_argument('--no_use_gpu', action='store_false', dest='use_gpu')\n"
+                    "parser.add_argument('--gpu_type', type=str, default='cuda')\n"
+                )
+
+            with open(os.path.join(scripts_dir, "LightTS.sh"), "w", encoding="utf-8") as f:
+                f.write(
+                    "python -u run.py \\\n"
+                    "  --task_name anomaly_detection \\\n"
+                    "  --is_training 1 \\\n"
+                    "  --root_path ./dataset/MSL \\\n"
+                    "  --model_id MSL \\\n"
+                    "  --model LightTS \\\n"
+                    "  --data MSL \\\n"
+                    "  --features M \\\n"
+                    "  --seq_len 100 \\\n"
+                    "  --pred_len 0\n"
+                )
+
+            with patch.object(agent_info_miner_mod.os.path, "dirname", return_value=fake_agents_dir):
+                doc = agent.query_docs("LightTS", "tslib", cache_path=cache_path)
 
         self.assertIn("Official script path:", doc)
         self.assertIn('"data": "MSL"', doc)
