@@ -119,6 +119,34 @@ Implementation requirements:
 - Respect the provided feature count, file format, output filenames, and label placement rules.
 """)
 
+tslib_fast_review_prompt = PromptTemplate.from_template("""
+You are rewriting a Time-Series-Library anomaly-detection script for fast reviewer validation only.
+
+Original script:
+```python
+{code}
+```
+
+Synthetic training dataset path:
+{train_dataset}
+
+Algorithm:
+{algorithm_name}
+
+Task:
+1. Rewrite the script so it stays in Time-Series-Library and keeps the same algorithm and overall execution path.
+2. Make only the smallest possible changes needed to make validation run faster on synthetic data.
+3. Prefer lower-cost settings only when they correspond to arguments already present in the script or are clearly standard runtime flags already used by the script.
+4. Prefer CPU-safe execution when the script currently assumes GPU.
+5. Do not invent a new pipeline, do not replace the library, and do not switch to shell scripts.
+6. Return executable Python code only, with no markdown fences or explanations.
+
+Important:
+- This rewritten script is only for reviewer validation.
+- Preserve the original script structure as much as possible.
+- The original code generator result remains the source of truth.
+""")
+
 
 class AgentReviewer:
     """Responsible for executing code and recording metrics only."""
@@ -151,14 +179,34 @@ class AgentReviewer:
         try:
             # 1) Build a test script
             if package_name == "tslib":
+                base_code = code
                 print(f"[Reviewer][TSLib] Synthetic data generation started for {algorithm_name}")
-                self._generate_tslib_synthetic_data(
-                    code=code,
+                synthetic_root = self._generate_tslib_synthetic_data(
+                    code=base_code,
                     algorithm_name=algorithm_name,
                     train_dataset=train_dataset,
                 )
                 print(f"[Reviewer][TSLib] Synthetic data generation finished for {algorithm_name}")
-                test_script = code
+                base_code = self._rewrite_tslib_root_path(base_code, synthetic_root)
+
+                review_code = None
+                try:
+                    review_code = self._build_fast_tslib_review_code(
+                        code=base_code,
+                        algorithm_name=algorithm_name,
+                        train_dataset=train_dataset,
+                    )
+                    review_code = self._rewrite_tslib_root_path(review_code, synthetic_root)
+                    review_path = self._write_test_script(review_code, f"{algorithm_name}_review")
+                    review_error = self._run_script_for_validation(review_path, algorithm_name)
+                    if not review_error:
+                        return ""
+                    print(f"[Reviewer][TSLib] Fast review variant failed for {algorithm_name}; falling back to the original generated code.")
+                except Exception as review_exc:
+                    print(f"[Reviewer][TSLib] Fast review variant generation/execution failed for {algorithm_name}: {review_exc}")
+
+                base_path = self._write_test_script(base_code, algorithm_name)
+                return self._run_script_for_validation(base_path, algorithm_name)
             else:
                 test_script = llm.invoke(
                     test_prompt.invoke({
@@ -170,25 +218,8 @@ class AgentReviewer:
                 ).content
                 test_script = self._clean_markdown(test_script)
 
-            # 2) Save the rewritten script to file
-            folder = "generated_scripts"
-            os.makedirs(folder, exist_ok=True)
-            path = os.path.join(folder, f"{algorithm_name}_test.py")
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(test_script)
-
-            # 3) Execute the test script
-            print(f"[Reviewer] Test script execution started for {algorithm_name}")
-            res = self._execute_test_script(path, algorithm_name)
-            print("\n=== Test Execution Output ===\n", res.stdout, res.stderr)
-            print(f"[Reviewer] Test script execution finished for {algorithm_name} with return code {res.returncode}")
-
-            if res.returncode != 0:
-                return self._subprocess_output_as_error(res.stdout, res.stderr)
-            nested_error = self._detect_nested_failure(res.stdout, res.stderr)
-            if nested_error:
-                return self._subprocess_output_as_error(res.stdout, res.stderr)
-            return ""
+            path = self._write_test_script(test_script, algorithm_name)
+            return self._run_script_for_validation(path, algorithm_name)
         except Exception as e:
             print(f"[test_code] Exception: {e}")
             return str(e)
@@ -236,6 +267,71 @@ class AgentReviewer:
             raise RuntimeError(self._subprocess_output_as_error(res.stdout, res.stderr))
 
         return output_root
+
+    def _build_fast_tslib_review_code(
+        self,
+        code: str,
+        algorithm_name: str,
+        train_dataset: str | None,
+    ) -> str:
+        rewritten = llm.invoke(
+            tslib_fast_review_prompt.invoke(
+                {
+                    "code": code,
+                    "algorithm_name": algorithm_name,
+                    "train_dataset": train_dataset or "",
+                }
+            )
+        ).content
+        return self._clean_markdown(rewritten)
+
+    @staticmethod
+    def _write_test_script(test_script: str, algorithm_name: str) -> str:
+        folder = "generated_scripts"
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"{algorithm_name}_test.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(test_script)
+        return path
+
+    def _run_script_for_validation(self, path: str, algorithm_name: str) -> str:
+        print(f"[Reviewer] Test script execution started for {algorithm_name}")
+        res = self._execute_test_script(path, algorithm_name)
+        print("\n=== Test Execution Output ===\n", res.stdout, res.stderr)
+        print(f"[Reviewer] Test script execution finished for {algorithm_name} with return code {res.returncode}")
+
+        if res.returncode != 0:
+            return self._subprocess_output_as_error(res.stdout, res.stderr)
+        nested_error = self._detect_nested_failure(res.stdout, res.stderr)
+        if nested_error:
+            return self._subprocess_output_as_error(res.stdout, res.stderr)
+        return ""
+
+    @staticmethod
+    def _rewrite_tslib_root_path(code: str, output_root: Path) -> str:
+        match = re.search(r"cmd\s*=\s*(\[[\s\S]*?\])", code)
+        if not match:
+            return code
+        try:
+            cmd = ast.literal_eval(match.group(1))
+        except Exception:
+            return code
+        if not isinstance(cmd, list):
+            return code
+
+        cmd = [str(item) for item in cmd]
+        try:
+            idx = cmd.index("--root_path")
+        except ValueError:
+            return code
+
+        if idx + 1 < len(cmd) and not str(cmd[idx + 1]).startswith("--"):
+            cmd[idx + 1] = str(output_root)
+        else:
+            cmd.insert(idx + 1, str(output_root))
+
+        rebuilt = repr(cmd)
+        return code[:match.start(1)] + rebuilt + code[match.end(1):]
 
     def _execute_test_script(self, path: str, algorithm_name: str) -> SimpleNamespace:
         """Stream test output live to avoid long silent runs and surface where execution stalls."""

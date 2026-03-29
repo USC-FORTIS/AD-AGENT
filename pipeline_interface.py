@@ -185,6 +185,11 @@ def call_selector(state: FullToolState) -> dict:
 # ------------------------------------------------------------------
 # Node: info_miner
 # ------------------------------------------------------------------
+def _prepare_tslib_repo_if_needed(package_name: Optional[str]) -> None:
+    if package_name == "tslib":
+        prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
+
+
 def run_info_miner(
     algorithm: Optional[str] = None,
     package_name: Optional[str] = None,
@@ -218,10 +223,12 @@ def run_info_miner(
     state = build_state()
     state["current_tool"] = algorithm
     state["package_name"] = package_name
+    _prepare_tslib_repo_if_needed(package_name)
     result = call_info_miner(state)
     return result
 
 def call_info_miner(state: FullToolState) -> dict:
+    _prepare_tslib_repo_if_needed(state["package_name"])
     print(f"\n=== [Info_miner] Querying documentation for {state['current_tool']} ===")
     info_miner = state["agent_info_miner"]
     doc = info_miner.query_docs(
@@ -296,8 +303,7 @@ def run_code_generator(
 def call_code_generator_for_single_tool(state: FullToolState) -> dict:
     code_generator = state["agent_code_generator"]
     tool  = state["current_tool"]
-    if state["package_name"] == "tslib":
-        prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
+    _prepare_tslib_repo_if_needed(state["package_name"])
 
     # generate code || revise code
     if state["code_quality"] is None:
