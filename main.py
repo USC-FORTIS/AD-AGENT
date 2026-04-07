@@ -176,7 +176,13 @@ async def main():
     for tool, tstate in final_state.get("results", []):
         cq: CodeQuality | None = tstate.get("code_quality")
         if cq and not cq.error_message:
-            print(f"[{tool}] AUROC: {cq.auroc:.4f}  AUPRC: {cq.auprc:.4f}  Parameters: {cq.parameters}")
+            if tstate.get("package_name") == "tslib":
+                print(
+                    f"[{tool}] ACC: {cq.accuracy:.4f}  F1: {cq.f1:.4f}  "
+                    f"SPE: {cq.specificity:.4f}  SEN: {cq.sensitivity:.4f}  Parameters: {cq.parameters}"
+                )
+            else:
+                print(f"[{tool}] AUROC: {cq.auroc:.4f}  AUPRC: {cq.auprc:.4f}  Parameters: {cq.parameters}")
         else:
             print(f"[{tool}] Error: {cq.error_message if cq else 'Unknown'}")
 

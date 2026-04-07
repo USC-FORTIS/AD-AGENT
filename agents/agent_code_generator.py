@@ -2,10 +2,12 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 import ast
 import os
+import json
 import re
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
+from utils.tsb_ad_registry import get_installed_tsb_ad_algorithms
 import subprocess
 from datetime import datetime, timedelta
 from config.config import Config
@@ -142,6 +144,94 @@ IMPORTANT:
 - Do NOT include any additional or incorrect parameters.
 """)
 
+template_tsb_ad_labeled = PromptTemplate.from_template("""
+You are an expert Python developer with deep experience in time-series anomaly detection using TSB-AD.
+
+1. Use the provided official documentation content for `{algorithm}` to understand how to call the model through TSB-AD.
+2. Write only executable Python code and do not include any explanations or descriptions.
+3. Base your code strictly on the following official documentation excerpt:
+
+--- BEGIN DOCUMENTATION ---
+{algorithm_doc}
+--- END DOCUMENTATION ---
+
+4. The code should:
+   (1) Import `inspect`, `os`, `sys`, `numpy as np`, `pandas as pd`, and sklearn metrics.
+   (2) Include `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` near the top.
+   (3) Import the direct wrapper for the target algorithm using:
+       `from TSB_AD.model_wrapper import run_{algorithm}`
+       and call that wrapper directly.
+       The imported wrapper name, the assigned `model_runner`, and the called function must be exactly the same symbol: `run_{algorithm}`.
+       Do not reference `run_{algorithm}` unless it is explicitly imported earlier in the script.
+   (4) Load training data from `{data_path_train}` and test data from `{data_path_test}`.
+       - Support CSV files with value columns plus one label column such as `Label`, `label`, or `anomaly`.
+       - Support `.npy` datasets and legacy dataset roots by resolving companion files like `_train.npy`, `_test.npy`, and `_test_label.npy`.
+       - Drop timestamp-like columns from CSV feature matrices.
+   (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
+   (6) Store the callable in variable `model_runner = run_{algorithm}`.
+   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
+       You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
+       If a parameter is not in the direct wrapper signature, do not pass it.
+   (8) Run `train_scores = model_runner(X_train, **run_kwargs)` and `test_scores = model_runner(X_test, **run_kwargs)`.
+   (9) Convert outputs to 1D numpy float arrays and validate lengths.
+   (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score`.
+   (11) Print metrics exactly in this format:
+       AUROC: 0.1234
+       AUPRC: 0.5678
+   (12) Threshold test scores using the 95th percentile of training scores and print mismatches exactly as:
+       `Failed prediction at point [xx, xx, ...] with true label z`
+
+IMPORTANT:
+- Produce only executable Python code.
+- Do not use subprocess.
+- Do not use `run_Unsupervise_AD`; call the direct wrapper for `{algorithm}` instead.
+- Do not invent unsupported arguments or unsupported TSB-AD APIs.
+- Keep the script robust to both CSV and `.npy`-style time-series inputs.
+""")
+
+template_tsb_ad_unlabeled = PromptTemplate.from_template("""
+You are an expert Python developer with deep experience in time-series anomaly detection using TSB-AD.
+
+1. Use the provided official documentation content for `{algorithm}` to understand how to call the model through TSB-AD.
+2. Write only executable Python code and do not include any explanations or descriptions.
+3. Base your code strictly on the following official documentation excerpt:
+
+--- BEGIN DOCUMENTATION ---
+{algorithm_doc}
+--- END DOCUMENTATION ---
+
+4. The code should:
+   (1) Import `inspect`, `os`, `sys`, `numpy as np`, and `pandas as pd`.
+   (2) Include `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` near the top.
+   (3) Import the direct wrapper for the target algorithm using:
+       `from TSB_AD.model_wrapper import run_{algorithm}`
+       and call that wrapper directly.
+       The imported wrapper name, the assigned `model_runner`, and the called function must be exactly the same symbol: `run_{algorithm}`.
+       Do not reference `run_{algorithm}` unless it is explicitly imported earlier in the script.
+   (4) Load data from `{data_path_train}`.
+       - Support CSV files with value columns and optional label columns.
+       - Support `.npy` datasets and legacy dataset roots by resolving companion `_train.npy` files.
+       - Drop timestamp-like columns from CSV feature matrices.
+   (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
+   (6) Store the callable in variable `model_runner = run_{algorithm}`.
+   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
+       You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
+       If a parameter is not in the direct wrapper signature, do not pass it.
+   (8) Run `scores = model_runner(X_train, **run_kwargs)`.
+   (9) Convert outputs to a 1D numpy float array and validate its length.
+   (10) Print metrics exactly:
+       AUROC: -1
+       AUPRC: -1
+   (11) Print detected outliers exactly as:
+       `Detected outlier at point [xx, xx, ...]`
+
+IMPORTANT:
+- Produce only executable Python code.
+- Do not use subprocess.
+- Do not use `run_Unsupervise_AD`; call the direct wrapper for `{algorithm}` instead.
+- Do not invent unsupported arguments or unsupported TSB-AD APIs.
+""")
+
 template_fix = PromptTemplate.from_template("""
 You are an expert Python developer fixing an anomaly-detection Python script.
 
@@ -175,6 +265,8 @@ Strict rules:
 9. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
 10. Keep all valid existing arguments unless the error indicates one of them is the cause.
 11. Do not introduce markdown fences, explanations, or comments.
+12. If the script uses a TSB-AD direct wrapper such as `run_TranAD` or `run_OmniAnomaly`, preserve that direct wrapper import and call style.
+13. If the error is `unexpected keyword argument`, remove or filter unsupported keyword arguments using the direct wrapper signature instead of inventing replacement parameter names.
 
 Return only executable Python code.
 """)
@@ -423,6 +515,8 @@ class AgentCodeGenerator:
             tpl = template_pyod_labeled if data_path_test else template_pyod_unlabeled
         elif package_name == "pygod":
             tpl = template_pygod_labeled if data_path_test else template_pygod_unlabeled
+        elif package_name == "tsb_ad":
+            tpl = template_tsb_ad_labeled if data_path_test else template_tsb_ad_unlabeled
         elif package_name == "tslib": # tslib only has labeled data
             tpl = template_tslib_labeled if data_path_test else template_tslib_unlabeled
         else:
@@ -437,8 +531,6 @@ class AgentCodeGenerator:
             })
         ).content
         cleaned = self._clean(raw)
-        # if package_name == "tslib":
-        #     cleaned = self._sanitize_tslib_args(cleaned)
         print(f"Generated code: {cleaned}\n")
         return cleaned
 
@@ -457,7 +549,6 @@ class AgentCodeGenerator:
         # increase review counter here
         code_quality.review_count += 1
         cleaned = self._clean(fixed)
-        # return self._sanitize_tslib_args(cleaned)
         return cleaned
 
 

@@ -9,8 +9,9 @@ from data_loader.data_loader import DataLoader
 
 from ad_model_selection.prompts.pygod_ms_prompt import generate_model_selection_prompt_from_pygod
 from ad_model_selection.prompts.pyod_ms_prompt import generate_model_selection_prompt_from_pyod
-from ad_model_selection.prompts.timeseries_ms_prompt import generate_model_selection_prompt_from_timeseries
+from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection_prompt_from_tsb_ad
 from utils.openai_client import query_openai
+from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, is_installed_tsb_ad_algorithm
 import json
 
 class AgentSelector:
@@ -20,19 +21,6 @@ class AgentSelector:
       self.data_path_test = user_input['dataset_test']
       self.user_input = user_input
       self.algorithm = None
-
-      # if user_input['dataset_train'].endswith(".pt"):
-      #   self.package_name = "pygod"
-      # elif user_input['dataset_train'].endswith(".mat"):
-      #   self.package_name = "pyod"
-      # elif user_input['dataset_train'].endswith("_train.npy"):
-      #   user_input['dataset_train'] = user_input['dataset_train'].replace("_train.npy", "")
-      #   self.package_name = "tslib"
-      # else:
-      #   self.package_name = "darts"
-
-      # Change Order
-      # Logic Problem
 
       # TODO: add meta info
       self.load_data(self.data_path_train, self.data_path_test)
@@ -65,10 +53,11 @@ class AgentSelector:
           self.y_test = None
 
      
+      # TSLib routing is intentionally disabled; legacy tslib-style datasets now use TSB-AD.
       if type(self.X_train) is str and self.X_train == 'tslib':
-        self.package_name = "tslib"
+        self.package_name = "tsb_ad"
       elif train_path.endswith('.npy'):
-        self.package_name = "tslib"
+        self.package_name = "tsb_ad"
         if self.X_train is not None:
           if len(self.X_train.shape) > 1:
             num_features = self.X_train.shape[1]
@@ -77,7 +66,7 @@ class AgentSelector:
       elif train_path.endswith('.pt') or type(y_train) is str and y_train == 'graph':
         self.package_name = "pygod"
       elif type(y_train) is str and y_train == 'time-series':
-        self.package_name = "darts"
+        self.package_name = "tsb_ad"
       else:
         self.package_name = "pyod"
 
@@ -106,28 +95,20 @@ class AgentSelector:
           content = query_openai(messages, model="o4-mini")
           algorithm = json.loads(content)["choice"]
           print(f"Algorithm: {algorithm}")
-        else: # for time series data
-          if self.X_train is not None and type(self.X_train) is not str:
-            print('Shape of X_train:', self.X_train.shape)
-            dim = 1
-            if len(self.X_train.shape) > 1:
-              num_features = self.X_train.shape[1]
-              self.parameters['enc_in'] = num_features
-              dim = num_features
-            ts_type = "multivariate" if dim > 1 else "univariate"
-            
-            num_signals = len(self.X_train)
-            messages = generate_model_selection_prompt_from_timeseries(
-              name,
-              num_signals,
-              dim,
-              ts_type
-            )
-            content = query_openai(messages, model="o4-mini")
-            algorithm = json.loads(content)["choice"]
-            print(f"Algorithm: {algorithm}")
-          else:
-            algorithm = 'Autoformer'
+        elif self.package_name == "tsb_ad":
+          dim = 1
+          if self.X_train is not None and hasattr(self.X_train, "shape") and len(self.X_train.shape) > 1:
+            dim = self.X_train.shape[1]
+          ts_type = "multivariate" if dim > 1 else "univariate"
+          num_signals = len(self.X_train) if self.X_train is not None else 0
+          messages = generate_model_selection_prompt_from_tsb_ad(
+            name, num_signals, dim, ts_type
+          )
+          content = query_openai(messages, model="o4-mini")
+          algorithm = json.loads(content)["choice"]
+          print(f"Algorithm: {algorithm}")
+        else:
+          algorithm = 'IForest'
         self.algorithm = [algorithm]
         self.tools = [algorithm]
 
@@ -166,6 +147,8 @@ class AgentSelector:
           return ['SCAN','GAE','Radar','ANOMALOUS','ONE','DOMINANT','DONE','AdONE','AnomalyDAE','GAAN','DMGD','OCGNN','CoLA','GUIDE','CONAD','GADNR','CARD']
         elif self.package_name == "pyod":
           return ['ECOD', 'ABOD', 'FastABOD', 'COPOD', 'MAD', 'SOS', 'QMCD', 'KDE', 'Sampling', 'GMM', 'PCA', 'KPCA', 'MCD', 'CD', 'OCSVM', 'LMDD', 'LOF', 'COF', '(Incremental) COF', 'CBLOF', 'LOCI', 'HBOS', 'kNN', 'AvgKNN', 'MedKNN', 'SOD', 'ROD', 'IForest', 'INNE', 'DIF', 'FeatureBagging', 'LSCP', 'XGBOD', 'LODA', 'SUOD', 'AutoEncoder', 'VAE', 'Beta-VAE', 'SO_GAAL', 'MO_GAAL', 'DeepSVDD', 'AnoGAN', 'ALAD', 'AE1SVM', 'DevNet', 'R-Graph', 'LUNAR']
+        elif self.package_name == "tsb_ad":
+          return TSB_AD_SINGLE_INPUT_ALGORITHMS
         else:
           # return ['GlobalNaiveAggregate','GlobalNaiveDrift','GlobalNaiveSeasonal']
           return ["GlobalNaiveAggregate","GlobalNaiveDrift","GlobalNaiveSeasonal","RNNModel","BlockRNNModel","NBEATSModel","NHiTSModel","TCNModel","TransformerModel","TFTModel","DLinearModel","NLinearModel","TiDEModel","TSMixerModel","LinearRegressionModel","RandomForest","LightGBMModel","XGBModel","CatBoostModel"]

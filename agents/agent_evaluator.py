@@ -10,7 +10,7 @@ class AgentEvaluator:
     """
 
     # ---------- public ----------
-    def execute_code(self, code: str, algorithm_name: str) -> CodeQuality:
+    def execute_code(self, code: str, algorithm_name: str, package_name: str = "") -> CodeQuality:
         # Create folder for generated scripts if it doesn't exist
         folder = "./generated_scripts"
         os.makedirs(folder, exist_ok=True)
@@ -44,12 +44,22 @@ class AgentEvaluator:
         auroc  = self._find_float(r"AUROC:\s*([\d.]+)", res.stdout)
         auprc  = self._find_float(r"AUPRC:\s*([\d.]+)", res.stdout)
         errors = self._parse_errors(res.stdout)
+        accuracy = -1.0
+        f1 = -1.0
+        specificity = -1.0
+        sensitivity = -1.0
+        if package_name == "tslib":
+            accuracy = self._find_float(r"Accuracy\s*:\s*([\d.]+)", res.stdout)
+            specificity = self._find_float(r"Precision\s*:\s*([\d.]+)", res.stdout)
+            sensitivity = self._find_float(r"Recall\s*:\s*([\d.]+)", res.stdout)
+            f1 = self._find_float(r"F-score\s*:\s*([\d.]+)", res.stdout)
 
         # Return evaluation result
         return CodeQuality(
             code=code, algorithm=algorithm_name, parameters={}, std_output=res.stdout,
             error_message="", auroc=auroc, auprc=auprc,
-            error_points=errors, review_count=0
+            error_points=errors, review_count=0,
+            accuracy=accuracy, f1=f1, specificity=specificity, sensitivity=sensitivity
         )
 
     # ---------- helpers ----------

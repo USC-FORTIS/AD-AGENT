@@ -1,4 +1,5 @@
 from langchain_core.prompts import PromptTemplate
+import ast
 from datetime import datetime, timedelta
 import json
 import re
@@ -128,17 +129,50 @@ Format:
 ```
 """)
 
-web_search_prompt_tsbad = PromptTemplate.from_template("""
+web_search_prompt_tsb_ad = PromptTemplate.from_template("""
 You are a machine learning expert and will assist me with researching a specific use of a time-series anomaly detection model in TSB-AD.
 
-I want to run `{algorithm_name}`. What are the relevant initialization or runtime parameters and attributes?
-Briefly return related document content.
-Then, extract the runnable parameters for `{algorithm_name}` and return a valid Python dictionary string in a fenced Python code block.
+Official project to refer to:
+https://github.com/TheDatumOrg/TSB-AD
+
+Target model:
+`{algorithm_name}`
+
+Task:
+1. Briefly summarize the relevant official usage for `{algorithm_name}` in TSB-AD.
+2. Focus on how `{algorithm_name}` is called through the direct wrapper `TSB_AD.model_wrapper.run_{algorithm_name}`.
+3. Extract only the runtime keyword parameters that are actually relevant when calling `run_{algorithm_name}(data, **kwargs)`.
+4. Return a valid Python dictionary in a fenced Python code block.
+
+Rules:
+- Prefer the official repository and package usage.
+- Do not invent class constructor parameters if they are not accepted by `run_{algorithm_name}`.
+- If `{algorithm_name}` does not require extra keyword arguments, return an empty dictionary.
+- Keep the output grounded in TSB-AD usage rather than generic model papers.
+
+Format:
+```python
+{{
+    "param1": default_value1,
+    "param2": default_value2
+}}
+```
 """)
 
 class AgentInfoMiner:
+    CACHE_KEY_VERSION = "v2"
+
     def __init__(self):
         pass
+
+    @classmethod
+    def _cache_key(cls, algorithm: str, package_name: str) -> str:
+        return f"{cls.CACHE_KEY_VERSION}::{package_name}::{algorithm}"
+
+    def query_metadata(self, algorithm: str, package_name: str) -> dict:
+        if package_name != "tslib":
+            return {}
+        return self._build_tslib_cli_metadata(algorithm)
 
     def query_docs(self, algorithm, package_name,cache_path = "cache.json"):
         """Searches for relevant documentation with caching, expiration, and thread-safe cache writes."""
@@ -162,44 +196,44 @@ class AgentInfoMiner:
                     cache = {}
 
             # Check cache entry
-            if algorithm in cache:
+            cache_key = self._cache_key(algorithm, package_name)
+            if cache_key in cache:
                 try:
-                    cached_time = datetime.fromisoformat(cache[algorithm]["query_datetime"])
+                    cached_time = datetime.fromisoformat(cache[cache_key]["query_datetime"])
                     if datetime.now() - cached_time < timedelta(days=7):
-                        print(f"[Cache Hit] Using recent cache for {algorithm}")
-                        print(cache[algorithm]["document"])
-                        return cache[algorithm]["document"]
+                        print(f"[Cache Hit] Using recent cache for {package_name}:{algorithm}")
+                        print(cache[cache_key]["document"])
+                        return cache[cache_key]["document"]
                     else:
-                        print(f"[Cache Expired] Re-querying {algorithm}")
+                        print(f"[Cache Expired] Re-querying {package_name}:{algorithm}")
                 except Exception:
-                    print(f"[Cache Warning] Datetime parse error for {algorithm}, re-querying.")
+                    print(f"[Cache Warning] Datetime parse error for {package_name}:{algorithm}, re-querying.")
 
         # Step 3: Run actual query outside lock (non-blocking for others)
-        if package_name == "tslib":
-            algorithm_doc = self._query_tslib_docs(algorithm)
-        else:
-            client = OpenAI()
-            match package_name:
-                case "pyod":
-                    prompt_temp = web_search_prompt_pyod
-                case "pygod":
-                    prompt_temp = web_search_prompt_pygod
-                case "tsbad":
-                    prompt_temp = web_search_prompt_tsbad
-                case _:
-                    prompt_temp = web_search_prompt_darts
+        client = OpenAI()
+        match package_name:
+            case "pyod":
+                prompt_temp = web_search_prompt_pyod
+            case "pygod":
+                prompt_temp = web_search_prompt_pygod
+            case "tslib":
+                prompt_temp = web_search_prompt_tslib
+            case "tsb_ad":
+                prompt_temp = web_search_prompt_tsb_ad
+            case _:
+                prompt_temp = web_search_prompt_darts
 
-            prompt = prompt_temp.invoke({"algorithm_name": algorithm}).to_string()
-            if package_name == "darts":
-                prompt = prompt + "\n\n" + web_dict.get(algorithm, "")
+        prompt = prompt_temp.invoke({"algorithm_name": algorithm}).to_string()
+        if package_name == "darts":
+            prompt = prompt + "\n\n" + web_dict.get(algorithm, "")
 
-            response = client.responses.create(
-                model="gpt-4o",
-                tools=[{"type": "web_search_preview"}],
-                input=prompt,
-                max_output_tokens=2024
-            )
-            algorithm_doc = response.output_text
+        response = client.responses.create(
+            model="gpt-4o",
+            tools=[{"type": "web_search_preview"}],
+            input=prompt,
+            max_output_tokens=2024
+        )
+        algorithm_doc = response.output_text
         
 
         # Query using RAG
@@ -228,7 +262,8 @@ class AgentInfoMiner:
                 except json.JSONDecodeError:
                     cache = {}
 
-            cache[algorithm] = {
+            cache_key = self._cache_key(algorithm, package_name)
+            cache[cache_key] = {
                 "query_datetime": datetime.now().isoformat(),
                 "document": algorithm_doc
             }
@@ -236,7 +271,7 @@ class AgentInfoMiner:
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(cache, f, ensure_ascii=False, indent=2)
 
-        print(f"[Cache Updated] Stored new documentation for {algorithm}")
+        print(f"[Cache Updated] Stored new documentation for {package_name}:{algorithm}")
         return algorithm_doc
 
     @staticmethod

@@ -171,6 +171,7 @@ class AgentReviewer:
         algorithm_name: str,
         package_name: str,
         train_dataset: str | None = None,
+        tslib_cli_metadata: dict | None = None,
     ) -> str:
         """
         Generate a test script using synthetic data and execute it.
@@ -181,22 +182,27 @@ class AgentReviewer:
             if package_name == "tslib":
                 base_code = code
                 print(f"[Reviewer][TSLib] Synthetic data generation started for {algorithm_name}")
+                # Use LLM to generate synthetic data script.
                 synthetic_root = self._generate_tslib_synthetic_data(
                     code=base_code,
                     algorithm_name=algorithm_name,
                     train_dataset=train_dataset,
                 )
                 print(f"[Reviewer][TSLib] Synthetic data generation finished for {algorithm_name}")
-                base_code = self._rewrite_tslib_root_path(base_code, synthetic_root)
+                # Rewrite the original code's data loading to point to the synthetic data. Use metadata in tslib.
+                base_code = self._rewrite_tslib_root_path(base_code, synthetic_root, tslib_cli_metadata)
 
                 review_code = None
                 try:
+                    # Let LLM attempt a fast rewrite of the original code for reviewer validation. 
+                    # This is a best-effort attempt to reduce reviewer runtime.
                     review_code = self._build_fast_tslib_review_code(
                         code=base_code,
                         algorithm_name=algorithm_name,
                         train_dataset=train_dataset,
                     )
-                    review_code = self._rewrite_tslib_root_path(review_code, synthetic_root)
+                    # Rewrite the LLM-generated review code to point to the synthetic data as well, using the same metadata.
+                    review_code = self._rewrite_tslib_root_path(review_code, synthetic_root, tslib_cli_metadata)
                     review_path = self._write_test_script(review_code, f"{algorithm_name}_review")
                     review_error = self._run_script_for_validation(review_path, algorithm_name)
                     if not review_error:
@@ -308,7 +314,11 @@ class AgentReviewer:
         return ""
 
     @staticmethod
-    def _rewrite_tslib_root_path(code: str, output_root: Path) -> str:
+    def _rewrite_tslib_root_path(
+        code: str,
+        output_root: Path,
+        tslib_cli_metadata: dict | None = None,
+    ) -> str:
         match = re.search(r"cmd\s*=\s*(\[[\s\S]*?\])", code)
         if not match:
             return code
@@ -320,8 +330,13 @@ class AgentReviewer:
             return code
 
         cmd = [str(item) for item in cmd]
+        dataset_root_arg = "root_path"
+        if tslib_cli_metadata and tslib_cli_metadata.get("dataset_root_arg"):
+            dataset_root_arg = str(tslib_cli_metadata["dataset_root_arg"])
+
+        flag = f"--{dataset_root_arg}"
         try:
-            idx = cmd.index("--root_path")
+            idx = cmd.index(flag)
         except ValueError:
             return code
 

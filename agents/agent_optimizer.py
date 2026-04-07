@@ -130,6 +130,7 @@ class AgentOptimizer:
         llm: ChatOpenAI,
         quality: CodeQuality,
         algorithm_doc: str,
+        package_name: str = "",
         max_steps: int = 8
     ) -> CodeQuality:
         """Run the optimization loop using the given inputs and return CodeQuality."""
@@ -173,6 +174,15 @@ class AgentOptimizer:
 
         auroc = self._find_float(r"AUROC:\s*([0-9.]+)", final_output, default=quality.auroc)
         auprc = self._find_float(r"AUPRC:\s*([0-9.]+)", final_output, default=quality.auprc)
+        accuracy = quality.accuracy
+        f1 = quality.f1
+        specificity = quality.specificity
+        sensitivity = quality.sensitivity
+        if package_name == "tslib":
+            accuracy = self._find_float(r"Accuracy\s*:\s*([0-9.]+)", final_output, default=quality.accuracy)
+            specificity = self._find_float(r"Precision\s*:\s*([0-9.]+)", final_output, default=quality.specificity)
+            sensitivity = self._find_float(r"Recall\s*:\s*([0-9.]+)", final_output, default=quality.sensitivity)
+            f1 = self._find_float(r"F-score\s*:\s*([0-9.]+)", final_output, default=quality.f1)
         error_points = self._parse_errors(final_output)
 
         return CodeQuality(
@@ -184,7 +194,11 @@ class AgentOptimizer:
             auroc=auroc,
             auprc=auprc,
             error_points=error_points,
-            review_count=quality.review_count
+            review_count=quality.review_count,
+            accuracy=accuracy,
+            f1=f1,
+            specificity=specificity,
+            sensitivity=sensitivity,
         )
 
 

@@ -12,7 +12,7 @@ from agents.agent_reviewer import AgentReviewer
 from agents.agent_evaluator import AgentEvaluator
 from agents.agent_optimizer import AgentOptimizer
 from entity.code_quality import CodeQuality
-from utils.tslib_setup import prepare_tslib_repo
+# from utils.tslib_setup import prepare_tslib_repo
 
 from langchain_openai          import ChatOpenAI
 
@@ -39,6 +39,7 @@ class FullToolState(TypedDict):
     experiment_config: dict | None
     results         : List[Tuple[str, Any]] | None
     algorithm_doc   : str | None
+    tslib_cli_metadata: dict | None
 
 # Ensure API key is available
 os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
@@ -74,6 +75,7 @@ def build_state() -> Dict[str, Any]:
         "experiment_config": None,
         "results": None,
         "algorithm_doc": None,
+        "tslib_cli_metadata": None,
     }
 
 # ------------------------------------------------------------------
@@ -186,8 +188,10 @@ def call_selector(state: FullToolState) -> dict:
 # Node: info_miner
 # ------------------------------------------------------------------
 def _prepare_tslib_repo_if_needed(package_name: Optional[str]) -> None:
-    if package_name == "tslib":
-        prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
+    # TSLib is disabled for now; time-series flows are routed to TSB-AD instead.
+    # if package_name == "tslib":
+    #     prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
+    return None
 
 
 def run_info_miner(
@@ -235,8 +239,12 @@ def call_info_miner(state: FullToolState) -> dict:
         state["current_tool"],
         state["package_name"]
     )
+    metadata = info_miner.query_metadata(
+        state["current_tool"],
+        state["package_name"]
+    )
     print(f"\n=== [Info_miner] Documentation retrieved for {state['current_tool']} ===")
-    return {"algorithm_doc": doc}
+    return {"algorithm_doc": doc, "tslib_cli_metadata": metadata}
 
 
 # ------------------------------------------------------------------
@@ -382,7 +390,8 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
         cq.code,
         tool,
         state["package_name"],
-        train_dataset=state["data_path_train"]
+        train_dataset=state["data_path_train"],
+        tslib_cli_metadata=state.get("tslib_cli_metadata"),
     )
 
     if cq.error_message:
@@ -481,7 +490,7 @@ def call_evaluator_for_single_tool(state: FullToolState) -> dict:
     tool      = state["current_tool"]
 
     print(f"\n=== [Evaluator] Real‑data run for {tool} ===")
-    final_cq = evaluator.execute_code(cq.code, tool)
+    final_cq = evaluator.execute_code(cq.code, tool, state["package_name"])
 
     # keep review_count & parameters
     final_cq.review_count = cq.review_count
@@ -543,6 +552,7 @@ def call_optimizer_for_single_tool(state: FullToolState) -> dict:
     tuned_cq = optimizer.run(llm=llm,
                              quality=cq,
                              algorithm_doc=doc,
+                             package_name=state["package_name"],
                              max_steps=8)
     print(f"\n=== [Optimizer] Tuning finished for {state['current_tool']} ===")
     return {"code_quality": tuned_cq}
