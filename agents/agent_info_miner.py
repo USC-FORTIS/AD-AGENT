@@ -9,7 +9,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config.config import Config
-os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
+os.environ.setdefault('OPENAI_API_KEY', Config.OPENAI_API_KEY)
 
 web_search_prompt_pyod = PromptTemplate.from_template("""
    You are a machine learning expert and will assist me with researching a specific use of a deep learning model in PyOD. Here is the official document you should refer to: https://pyod.readthedocs.io/en/latest/pyod.models.html
@@ -197,7 +197,7 @@ class AgentInfoMiner:
                 model="gpt-4o",
                 tools=[{"type": "web_search_preview"}],
                 input=prompt,
-                max_output_tokens=2024
+                max_output_tokens=4096
             )
             algorithm_doc = response.output_text
         

@@ -40,6 +40,7 @@ class FullToolState(TypedDict):
     results         : List[Tuple[str, Any]] | None
     algorithm_doc   : str | None
     feature_dim     : int | None
+    metadata        : dict | None
 
 # Ensure API key is available
 os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
@@ -76,6 +77,7 @@ def build_state() -> Dict[str, Any]:
         "results": None,
         "algorithm_doc": None,
         "feature_dim": None,
+        "metadata": None,
     }
 
 # ------------------------------------------------------------------
@@ -178,7 +180,7 @@ def call_selector(state: FullToolState) -> dict:
         data_path_test  = selector.data_path_test,
         package_name    = selector.package_name,
         feature_dim     = selector.feature_dim,
-        # vectorstore     = selector.vectorstore
+        metadata        = getattr(selector, "metadata", None),
     )
     print("\n=== [Selector] Selection complete ===")
     return state
@@ -311,7 +313,8 @@ def call_code_generator_for_single_tool(state: FullToolState) -> dict:
             data_path_test  = state["data_path_test"],
             algorithm_doc   = state["algorithm_doc"],
             input_parameters= state["input_parameters"],
-            package_name    = state["package_name"]
+            package_name    = state["package_name"],
+            metadata        = state.get("metadata"),
         )
         parameters = code_generator._extract_init_params_dict(state["algorithm_doc"])
         cq = CodeQuality(code=code, algorithm=tool, parameters=parameters, std_output="",

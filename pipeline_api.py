@@ -40,6 +40,7 @@ def build_state(experiment_config: Optional[Dict[str, Any]] = None) -> Dict[str,
         "experiment_config": experiment_config,
         "results": None,
         "algorithm_doc": None,
+        "metadata": None,
     }
 
 
@@ -51,7 +52,7 @@ def run_processor(state: Dict[str, Any]) -> Dict[str, Any]:
     return state
 
 
-def run_selector(state: Dict[str, Any], attach_vectorstore: bool = False) -> Dict[str, Any]:
+def run_selector(state: Dict[str, Any]) -> Dict[str, Any]:
     """Run the selector to determine package and tools based on experiment config."""
     if state.get("experiment_config") is None:
         raise ValueError("experiment_config not set, run processor or pass config first")
@@ -63,18 +64,10 @@ def run_selector(state: Dict[str, Any], attach_vectorstore: bool = False) -> Dic
         data_path_test=selector.data_path_test,
         package_name=selector.package_name,
     )
-    # Prefer feature_dim from selector when available
+    # feature_dim is extracted via sandbox metadata inspection in the selector
     if getattr(selector, "feature_dim", None):
         state["feature_dim"] = int(selector.feature_dim)
-    # Infer feature dimension when possible (e.g., PyOD tabular data)
-    try:
-        if hasattr(selector, "X_train") and selector.X_train is not None:
-            if hasattr(selector.X_train, "shape") and len(selector.X_train.shape) > 1:
-                state["feature_dim"] = int(selector.X_train.shape[1])
-    except Exception:
-        pass
-    if attach_vectorstore:
-        state["vectorstore"] = selector.vectorstore
+    state["metadata"] = getattr(selector, "metadata", None)
     return state
 
 
@@ -106,6 +99,7 @@ def run_code_generator(
             algorithm_doc=algorithm_doc,
             input_parameters=state["input_parameters"],
             package_name=state["package_name"],
+            metadata=state.get("metadata"),
         )
         parameters = code_generator._extract_init_params_dict(algorithm_doc)
         cq = CodeQuality(

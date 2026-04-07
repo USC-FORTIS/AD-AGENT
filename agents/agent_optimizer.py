@@ -13,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
 from config.config import Config
 from sandbox.executor import execute_code as sandbox_execute_code
-os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
+os.environ.setdefault('OPENAI_API_KEY', Config.OPENAI_API_KEY)
 
 SYSTEM_PROMPT_TMPL = PromptTemplate.from_template(
     """
@@ -199,20 +199,16 @@ class AgentOptimizer:
 if __name__ == "__main__":
     demo = {
             "code": """
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data_loader.data_loader import DataLoader
+import scipy.io
+import numpy as np
 from pyod.models.abod import ABOD
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-# Initialize DataLoader
-dataloader_train = DataLoader(filepath='./data/glass_train.mat', store_script=True, store_path='train_data_loader.py')
-dataloader_test = DataLoader(filepath='./data/glass_test.mat', store_script=True, store_path='test_data_loader.py')
-
-# Load data
-X_train, y_train = dataloader_train.load_data(split_data=False)
-X_test, y_test = dataloader_test.load_data(split_data=False)
+# Load data directly using scipy
+train_data = scipy.io.loadmat('./data/glass_train.mat')
+X_train, y_train = train_data['X'], train_data['y'].ravel()
+test_data = scipy.io.loadmat('./data/glass_test.mat')
+X_test, y_test = test_data['X'], test_data['y'].ravel()
 
 # Initialize ABOD
 model = ABOD()

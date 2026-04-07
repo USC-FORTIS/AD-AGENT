@@ -125,15 +125,6 @@ compiled_full_graph = full_graph.compile()
 
 
 async def main():
-    for loader_file in (
-        "train_data_loader.py",
-        "test_data_loader.py",
-        "head_train_data_loader.py",
-        "head_test_data_loader.py",
-    ):
-        if os.path.exists(loader_file):
-            os.remove(loader_file)
-
     state: FullToolState = {
         "messages": [],
         "current_tool": "",

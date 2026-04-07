@@ -9,7 +9,7 @@ from entity.code_quality import CodeQuality
 import subprocess
 from datetime import datetime, timedelta
 from config.config import Config
-os.environ['OPENAI_API_KEY'] = Config.OPENAI_API_KEY
+os.environ.setdefault('OPENAI_API_KEY', Config.OPENAI_API_KEY)
 
 # Initialize OpenAI LLM
 llm = ChatOpenAI(model="gpt-4o", temperature=0)
@@ -26,24 +26,27 @@ You are an expert Python developer with deep experience in anomaly detection lib
 --- END DOCUMENTATION ---
 
 4. The code should:
-   (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head
-   (2) import DataLoader using following commend `from data_loader.data_loader import DataLoader` after (1)
-   (3) Initialize DataLoader using statement `dataloader_train = DataLoader(filepath = {data_path_train}, store_script=True, store_path = 'train_data_loader.py')` & `dataloader_test = DataLoader(filepath = {data_path_test}, store_script=True, store_path = 'test_data_loader.py')`
-  (4) Use the statement `X_train, y_train = dataloader_train.load_data(split_data=False)` & `X_test, y_test = dataloader_test.load_data(split_data=False)` to generate variables X_train, y_train, X_test, y_test;
-   (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
-   (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
-   (7) Use `.decision_scores_` on `X_train` for training outlier scores
+   (1) Import all necessary libraries (sys, os, numpy, scipy, pandas, sklearn, pyod, etc.)
+   (2) Load training data from `{data_path_train}` and testing data from `{data_path_test}` using the appropriate Python library based on the file format:
+       - `.mat` files: use `scipy.io.loadmat`, extract the feature matrix as `X_train`/`X_test` and labels as `y_train`/`y_test`
+       - `.csv` files: use `pandas.read_csv`, identify feature and label columns
+       Ensure `X_train`, `y_train`, `X_test`, `y_test` are properly defined as numpy arrays.
+   (3) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
+   (4) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values to the function.
+   (5) Use `.decision_scores_` on `X_train` for training outlier scores
        Use `.decision_function(X_test)` for test outlier scores
        Calculate AUROC (Area Under the Receiver Operating Characteristic Curve) and AUPRC (Area Under the Precision-Recall Curve) based on given data
-   (8) Using variables to record the AUROC & AUPRC and print them out in following format:
+   (6) Using variables to record the AUROC & AUPRC and print them out in following format:
        AUROC:\s*(\d+.\d+)
        AUPRC:\s*(\d+.\d+)
-   (9) Using variables to record prediction failed data and print these points out with true label in following format:
+   (7) Using variables to record prediction failed data and print these points out with true label in following format:
        `Failed prediction at point [xx,xx,xx...] with true label xx` Use `.tolist()` to convert point to be an array.
-                     
 
-IMPORTANT: 
-- Strictly follow steps (2)-(8) to load the data from `{data_path_train}` & {data_path_test}.
+Dataset metadata (use this to understand the data structure):
+{dataset_metadata}
+
+IMPORTANT:
+- Load data directly from `{data_path_train}` & `{data_path_test}` using standard Python libraries (scipy, pandas, numpy). Do NOT use any custom DataLoader class.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -59,22 +62,25 @@ You are an expert Python developer with deep experience in anomaly detection lib
 --- END DOCUMENTATION ---
 
 4. The code should:
-   (1)    
-   (2) Load the data from `{data_path_train}`
-   (3) Extract the feature matrix `X` from the loaded data as `X_train`
-   (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
-   (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
-   (7) Use `.decision_scores_` on `X_train` for training outlier scores
+   (1) Import all necessary libraries (sys, os, numpy, scipy, pandas, sklearn, pyod, etc.)
+   (2) Load the data from `{data_path_train}` using the appropriate Python library based on the file format:
+       - `.mat` files: use `scipy.io.loadmat`, extract the feature matrix as `X_train`
+       - `.csv` files: use `pandas.read_csv`, extract numeric columns as `X_train`
+   (3) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
+   (4) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values to the function.
+   (5) Use `.decision_scores_` on `X_train` for training outlier scores
        Use `.decision_function(X_train)` for test outlier scores
-   (8) Print AUROC & AUPRC Using default value `-1`:
+   (6) Print AUROC & AUPRC Using default value `-1`:
        `AUROC: -1`
        `AUPRC: -1`
-   (9) Using variables to record outlier data and print these points out with true label in following format:
+   (7) Using variables to record outlier data and print these points out in following format:
        `Detected outlier at point [xx,xx,xx...]` Use `.tolist()` to convert point to be an array.
-                     
 
-IMPORTANT: 
-- Strictly follow steps (2)-(8) to load the data from `{data_path_train}` & {data_path_test}.
+Dataset metadata (use this to understand the data structure):
+{dataset_metadata}
+
+IMPORTANT:
+- Load data directly from `{data_path_train}` using standard Python libraries (scipy, pandas, numpy). Do NOT use any custom DataLoader class.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -107,6 +113,9 @@ You are an expert Python developer with deep experience in anomaly detection lib
        AUROC:\s*(\d+.\d+)
        AUPRC:\s*(\d+.\d+)
 
+Dataset metadata (use this to understand the graph structure):
+{dataset_metadata}
+
 IMPORTANT:
 - Strictly follow steps (2)-(9) to load the data from `{data_path_train}` and `{data_path_test}`.
 - Do NOT include any additional or incorrect parameters.
@@ -136,6 +145,9 @@ You are an expert Python developer with deep experience in anomaly detection lib
        `AUPRC: -1`
    (9) Using variables to record prediction outlier data and print number of outlier points in following format:
        `Detected outlier number: xx`
+
+Dataset metadata (use this to understand the graph structure):
+{dataset_metadata}
 
 IMPORTANT:
 - Strictly follow steps (2)-(9) to load the data from `{data_path_train}` and `{data_path_test}`.
@@ -221,6 +233,9 @@ Constraints:
 4. At the top of the script, import `os` and `subprocess`.
 5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
 
+Dataset metadata:
+{dataset_metadata}
+
 Return one executable Python script and nothing else.
 """)
 
@@ -263,6 +278,9 @@ Constraints:
 3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
 4. At the top of the script, import `os` and `subprocess`.
 5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
+
+Dataset metadata:
+{dataset_metadata}
 
 Return one executable Python script and nothing else.
 """)
@@ -329,6 +347,9 @@ IMPORTANT RULES
 • Produce a single runnable Python script following the steps above—no explanations, comments, or additional outputs.  
 • Do **not** pass any optional or invalid parameters to `{algorithm}`.  
 • Ensure the script works with the CSV paths `{data_path_train}` and `{data_path_test}`.
+
+Dataset metadata:
+{dataset_metadata}
 """)
 
 template_darts_unlabeled = PromptTemplate.from_template("""
@@ -398,6 +419,9 @@ IMPORTANT RULES
 • Produce a single runnable Python script following the steps above—no explanations, comments, or additional outputs.  
 • Do **not** pass any optional or invalid parameters to `{algorithm}`.  
 • Ensure the script works with the CSV paths `{data_path_train}` and `{data_path_test}`.
+
+Dataset metadata:
+{dataset_metadata}
 """)
 
 
@@ -415,10 +439,11 @@ class AgentCodeGenerator:
         data_path_test,
         algorithm_doc,
         input_parameters,
-        package_name
+        package_name,
+        metadata=None,
     ) -> str:
         tpl = None
-       
+
         if package_name == "pyod":
             tpl = template_pyod_labeled if data_path_test else template_pyod_unlabeled
         elif package_name == "pygod":
@@ -427,13 +452,18 @@ class AgentCodeGenerator:
             tpl = template_tslib_labeled if data_path_test else template_tslib_unlabeled
         else:
             tpl = template_darts_labeled if data_path_test else template_darts_unlabeled
+
+        # Format metadata for prompt context
+        metadata_str = self._format_metadata(metadata, package_name)
+
         raw = llm.invoke(
             tpl.invoke({
                 "algorithm": algorithm,
                 "data_path_train": data_path_train,
                 "data_path_test": data_path_test,
                 "algorithm_doc": algorithm_doc,
-                "parameters": str(input_parameters)
+                "parameters": str(input_parameters),
+                "dataset_metadata": metadata_str,
             })
         ).content
         cleaned = self._clean(raw)
@@ -462,6 +492,34 @@ class AgentCodeGenerator:
 
 
     # -------- util --------
+    @staticmethod
+    def _format_metadata(metadata: dict | None, package_name: str) -> str:
+        """Format selector metadata into a human-readable string for prompts."""
+        if not metadata:
+            return "No metadata available."
+        parts = []
+        fmt = metadata.get("format")
+        if fmt:
+            parts.append(f"- File format: {fmt}")
+        if "num_samples" in metadata and metadata["num_samples"] is not None:
+            parts.append(f"- Number of samples: {metadata['num_samples']}")
+        if "feature_dim" in metadata and metadata["feature_dim"] is not None:
+            parts.append(f"- Feature dimensions: {metadata['feature_dim']}")
+        if "has_labels" in metadata:
+            parts.append(f"- Has labels: {metadata['has_labels']}")
+        if "has_timestamps" in metadata:
+            parts.append(f"- Has timestamps: {metadata['has_timestamps']}")
+        if "columns" in metadata:
+            parts.append(f"- Column names: {metadata['columns']}")
+        # pygod-specific
+        if "num_nodes" in metadata:
+            parts.append(f"- Number of nodes: {metadata['num_nodes']}")
+        if "num_edges" in metadata:
+            parts.append(f"- Number of edges: {metadata['num_edges']}")
+        if "num_features" in metadata:
+            parts.append(f"- Number of features: {metadata['num_features']}")
+        return "\n".join(parts) if parts else "No metadata available."
+
     @staticmethod
     def _clean(code: str) -> str:
         code = re.sub(r"```(python)?", "", code)

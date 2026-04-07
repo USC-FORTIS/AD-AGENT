@@ -30,7 +30,7 @@ You will receive a Python script for {package_name} that trains an anomaly-detec
 --- END CODE ---
 
 TASK:
-1. Replace all data-loading operations (DataLoader, torch.load, np.load, pandas.read*, etc.)
+1. Replace all data-loading operations (torch.load, np.load, scipy.io.loadmat, pandas.read*, etc.)
    with code that creates SMALL synthetic data directly in the script.
 2. Keep the variable names and the rest of the logic unchanged.
 3. Output runnable Python code only.

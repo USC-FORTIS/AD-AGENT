@@ -66,15 +66,6 @@ class _DummyOpenAI:
         )
 
 
-class _DummyDataLoader:
-    def __init__(self, filepath, store_script=True, store_path=None):
-        self.filepath = filepath
-
-    def load_data(self, split_data=False):
-        return np.zeros((10, 3)), np.zeros(10)
-
-
-
 def install_common_stubs():
     langchain_core_prompts = types.ModuleType("langchain_core.prompts")
     langchain_core_prompts.PromptTemplate = _DummyPromptTemplate
@@ -100,16 +91,12 @@ def install_common_stubs():
     openai_mod.OpenAI = _DummyOpenAI
     openai_mod.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=lambda **kw: None))
 
-    data_loader_mod = types.ModuleType("data_loader.data_loader")
-    data_loader_mod.DataLoader = _DummyDataLoader
-
     sys.modules["langchain_core.prompts"] = langchain_core_prompts
     sys.modules["langchain.prompts"] = langchain_prompts
     sys.modules["langchain_openai"] = langchain_openai
     sys.modules["langchain_core.messages"] = langchain_core_messages
     sys.modules["filelock"] = filelock_mod
     sys.modules["openai"] = openai_mod
-    sys.modules["data_loader.data_loader"] = data_loader_mod
 
 
 def load_real_agent_module(module_name: str):
