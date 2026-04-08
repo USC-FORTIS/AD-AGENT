@@ -11,7 +11,7 @@ from ad_model_selection.prompts.pygod_ms_prompt import generate_model_selection_
 from ad_model_selection.prompts.pyod_ms_prompt import generate_model_selection_prompt_from_pyod
 from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection_prompt_from_tsb_ad
 from utils.openai_client import query_openai
-from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, is_installed_tsb_ad_algorithm
+from utils.tsb_ad_registry import PYGOD_ALGORITHMS, PYOD_ALGORITHMS, TSB_AD_SINGLE_INPUT_ALGORITHMS
 import json
 
 class AgentSelector:
@@ -21,8 +21,11 @@ class AgentSelector:
       self.data_path_test = user_input['dataset_test']
       self.user_input = user_input
       self.algorithm = None
+      self.train_metadata = {}
+      self.test_metadata = None
+      self.dataset_metadata = {"train": self.train_metadata, "test": self.test_metadata}
+      self.metadata = {}
 
-      # TODO: add meta info
       self.load_data(self.data_path_train, self.data_path_test)
 
       self.tools = None
@@ -37,38 +40,45 @@ class AgentSelector:
       # self.vectorstore = self.build_vectorstore(self.documents)
 
     def load_data(self, train_path, test_path):
-      train_loader = DataLoader(train_path, store_script=True, store_path='train_data_loader.py')
+      train_loader = DataLoader(train_path, store_script=False)
       X_train, y_train = train_loader.load_data(split_data=False)
+      self.train_metadata = getattr(train_loader, "metadata", {}) or {}
       self.X_train = X_train
       self.y_train = y_train
       print(f"Loaded training data from {train_path}. X_train shape: {getattr(X_train, 'shape', 'N/A')}, y_train shape: {getattr(y_train, 'shape', 'N/A')}")
       # Only load test data if test_path is provided and not empty
       if test_path and os.path.exists(test_path):
-          test_loader = DataLoader(test_path, store_script=True, store_path='test_data_loader.py')
+          test_loader = DataLoader(test_path, store_script=False)
           X_test, y_test = test_loader.load_data(split_data=False)
+          self.test_metadata = getattr(test_loader, "metadata", {}) or {}
           self.X_test = X_test
           self.y_test = y_test
       else:
+          self.test_metadata = None
           self.X_test = None
           self.y_test = None
 
-     
-      # TSLib routing is intentionally disabled; legacy tslib-style datasets now use TSB-AD.
-      if type(self.X_train) is str and self.X_train == 'tslib':
-        self.package_name = "tsb_ad"
-      elif train_path.endswith('.npy'):
-        self.package_name = "tsb_ad"
-        if self.X_train is not None:
-          if len(self.X_train.shape) > 1:
-            num_features = self.X_train.shape[1]
-            self.parameters['enc_in'] = num_features
-            self.parameters['c_out'] = num_features
-      elif train_path.endswith('.pt') or type(y_train) is str and y_train == 'graph':
+      if train_path.endswith('.pt') or (isinstance(y_train, str) and y_train == 'graph'):
         self.package_name = "pygod"
-      elif type(y_train) is str and y_train == 'time-series':
+      elif train_path.endswith('.npy') or train_path.endswith('.npz') or (isinstance(y_train, str) and y_train == 'time-series'):
         self.package_name = "tsb_ad"
+        if self.X_train is not None and hasattr(self.X_train, "shape") and len(self.X_train.shape) > 1:
+          num_features = self.X_train.shape[1]
+          self.parameters['enc_in'] = num_features
+          self.parameters['c_out'] = num_features
       else:
         self.package_name = "pyod"
+
+
+      self.dataset_metadata = {
+        "train": self.train_metadata,
+        "test": self.test_metadata,
+      }
+      self.metadata = {
+        "dataset": self.dataset_metadata,
+        "package_name": self.package_name,
+        "parameters": self.parameters,
+      }
 
     def set_tools(self):
       user_input = self.user_input
@@ -113,6 +123,10 @@ class AgentSelector:
         self.tools = [algorithm]
 
         print('Selector Parameters:', self.parameters)
+      self.metadata.update({
+        "algorithm": self.algorithm,
+        "tools": self.tools,
+      })
         
 
     # def load_and_split_documents(self,folder_path="../docs"):
@@ -144,9 +158,9 @@ class AgentSelector:
       """Generates the tools for the agent."""
       if algorithm_input[0].lower() == "all":
         if self.package_name == "pygod":
-          return ['SCAN','GAE','Radar','ANOMALOUS','ONE','DOMINANT','DONE','AdONE','AnomalyDAE','GAAN','DMGD','OCGNN','CoLA','GUIDE','CONAD','GADNR','CARD']
+          return PYGOD_ALGORITHMS
         elif self.package_name == "pyod":
-          return ['ECOD', 'ABOD', 'FastABOD', 'COPOD', 'MAD', 'SOS', 'QMCD', 'KDE', 'Sampling', 'GMM', 'PCA', 'KPCA', 'MCD', 'CD', 'OCSVM', 'LMDD', 'LOF', 'COF', '(Incremental) COF', 'CBLOF', 'LOCI', 'HBOS', 'kNN', 'AvgKNN', 'MedKNN', 'SOD', 'ROD', 'IForest', 'INNE', 'DIF', 'FeatureBagging', 'LSCP', 'XGBOD', 'LODA', 'SUOD', 'AutoEncoder', 'VAE', 'Beta-VAE', 'SO_GAAL', 'MO_GAAL', 'DeepSVDD', 'AnoGAN', 'ALAD', 'AE1SVM', 'DevNet', 'R-Graph', 'LUNAR']
+          return PYOD_ALGORITHMS
         elif self.package_name == "tsb_ad":
           return TSB_AD_SINGLE_INPUT_ALGORITHMS
         else:
@@ -155,14 +169,6 @@ class AgentSelector:
       return algorithm_input
 
 if __name__ == "__main__":
-  if os.path.exists("train_data_loader.py"):
-    os.remove("train_data_loader.py")
-  if os.path.exists("test_data_loader.py"):
-    os.remove("test_data_loader.py")
-  if os.path.exists("head_train_data_loader.py"):
-    os.remove("head_train_data_loader.py")
-  if os.path.exists("head_test_data_loader.py"):
-    os.remove("head_test_data_loader.py")
   import sys
   sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
   from config.config import Config
@@ -170,8 +176,8 @@ if __name__ == "__main__":
 
   user_input = {
     "algorithm": ['TimesNet'],
-    "dataset_train": "../data/MSL",
-    "dataset_test": "../data/MSL",
+    "dataset_train": "../data/demo_train.npy",
+    "dataset_test": "../data/demo_test.npy",
     "parameters": {
     }
   }

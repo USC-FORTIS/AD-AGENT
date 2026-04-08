@@ -48,12 +48,6 @@ class AgentEvaluator:
         f1 = -1.0
         specificity = -1.0
         sensitivity = -1.0
-        if package_name == "tslib":
-            accuracy = self._find_float(r"Accuracy\s*:\s*([\d.]+)", res.stdout)
-            specificity = self._find_float(r"Precision\s*:\s*([\d.]+)", res.stdout)
-            sensitivity = self._find_float(r"Recall\s*:\s*([\d.]+)", res.stdout)
-            f1 = self._find_float(r"F-score\s*:\s*([\d.]+)", res.stdout)
-
         # Return evaluation result
         return CodeQuality(
             code=code, algorithm=algorithm_name, parameters={}, std_output=res.stdout,

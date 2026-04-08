@@ -136,11 +136,6 @@ compiled_full_graph = full_graph.compile()
 # ------------------------------------------------------------------
 
 async def main():
-    # clean loader scripts
-    for f in ("train_data_loader.py","test_data_loader.py",
-              "head_train_data_loader.py","head_test_data_loader.py"):
-        if os.path.exists(f): os.remove(f)
-
     state: FullToolState = {
         "messages"        : [],
         "current_tool"    : "",
@@ -161,7 +156,7 @@ async def main():
         "experiment_config": None,
         "results"         : None,
         "algorithm_doc"   : None,
-        "n_features"     : None,
+        "dataset_metadata": None,
     }
 
     print("\n=== [Main] Starting full pipeline ===")
@@ -176,13 +171,7 @@ async def main():
     for tool, tstate in final_state.get("results", []):
         cq: CodeQuality | None = tstate.get("code_quality")
         if cq and not cq.error_message:
-            if tstate.get("package_name") == "tslib":
-                print(
-                    f"[{tool}] ACC: {cq.accuracy:.4f}  F1: {cq.f1:.4f}  "
-                    f"SPE: {cq.specificity:.4f}  SEN: {cq.sensitivity:.4f}  Parameters: {cq.parameters}"
-                )
-            else:
-                print(f"[{tool}] AUROC: {cq.auroc:.4f}  AUPRC: {cq.auprc:.4f}  Parameters: {cq.parameters}")
+            print(f"[{tool}] AUROC: {cq.auroc:.4f}  AUPRC: {cq.auprc:.4f}  Parameters: {cq.parameters}")
         else:
             print(f"[{tool}] Error: {cq.error_message if cq else 'Unknown'}")
 

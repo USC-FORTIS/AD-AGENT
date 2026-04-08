@@ -29,9 +29,13 @@ You are an expert Python developer with deep experience in anomaly detection lib
 
 4. The code should:
    (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head
-   (2) import DataLoader using following commend `from data_loader.data_loader import DataLoader` after (1)
-   (3) Initialize DataLoader using statement `dataloader_train = DataLoader(filepath = {data_path_train}, store_script=True, store_path = 'train_data_loader.py')` & `dataloader_test = DataLoader(filepath = {data_path_test}, store_script=True, store_path = 'test_data_loader.py')`
-   (4) Use the statement `X_train, y_train = dataloader_train.load_data(split_data=False)` & `X_test, y_test = dataloader_test.load_data(split_data=False)` to generate variables X_train, y_train, X_test, y_test; 
+   (2) Load data directly from `{data_path_train}` and `{data_path_test}`.
+   (3) Use the dataset metadata below to choose the correct loading logic:
+       {dataset_metadata}
+   (4) Create variables `X_train`, `y_train`, `X_test`, and `y_test` directly from the files. Use standard libraries such as `pandas`, `numpy`, `scipy.io`, or `json` as appropriate for the file type and metadata.
+       For CSV files, infer label columns from metadata/head preview and common names like `label`, `Label`, `target`, or `anomaly`; otherwise treat the last clearly target-like column as label.
+       For `.mat` files, load with `scipy.io.loadmat` and use metadata/head preview to select feature and label arrays.
+       Ensure `X_train` and `X_test` are 2D numeric arrays and `y_train`/`y_test` are 1D numeric arrays.
    (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
    (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
    (7) Use `.decision_scores_` on `X_train` for training outlier scores
@@ -45,7 +49,8 @@ You are an expert Python developer with deep experience in anomaly detection lib
                      
 
 IMPORTANT: 
-- Strictly follow steps (2)-(8) to load the data from `{data_path_train}` & {data_path_test}.
+- Strictly follow steps (2)-(8) to load the data directly from `{data_path_train}` & {data_path_test}.
+- Do not use `DataLoader` in the generated script; the selector has already collected dataset metadata for you.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -61,9 +66,13 @@ You are an expert Python developer with deep experience in anomaly detection lib
 --- END DOCUMENTATION ---
 
 4. The code should:
-   (1)    
-   (2) Load the data from `{data_path_train}`
-   (3) Extract the feature matrix `X` from the loaded data as `X_train`
+   (1) Import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head.
+   (2) Load data directly from `{data_path_train}`. Do not import or use `DataLoader`, and do not generate or read `train_data_loader.py`.
+   (3) Use the dataset metadata below to choose the correct loading logic:
+       {dataset_metadata}
+   (4) Extract the feature matrix from the loaded data as `X_train`. Use standard libraries such as `pandas`, `numpy`, `scipy.io`, or `json` as appropriate for the file type and metadata.
+       For CSV files, drop obvious label/target columns and non-numeric identifier columns from `X_train`.
+       For `.mat` files, load with `scipy.io.loadmat` and use metadata/head preview to select the feature array.
    (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
    (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
    (7) Use `.decision_scores_` on `X_train` for training outlier scores
@@ -76,7 +85,8 @@ You are an expert Python developer with deep experience in anomaly detection lib
                      
 
 IMPORTANT: 
-- Strictly follow steps (2)-(8) to load the data from `{data_path_train}` & {data_path_test}.
+- Strictly follow steps (2)-(8) to load the data directly from `{data_path_train}`.
+- Do not use `DataLoader` in the generated script; the selector has already collected dataset metadata for you.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -167,13 +177,28 @@ You are an expert Python developer with deep experience in time-series anomaly d
        - Support CSV files with value columns plus one label column such as `Label`, `label`, or `anomaly`.
        - Support `.npy` datasets and legacy dataset roots by resolving companion files like `_train.npy`, `_test.npy`, and `_test_label.npy`.
        - Drop timestamp-like columns from CSV feature matrices.
+       - Convert feature matrices to numeric numpy arrays and clean missing values before calling the wrapper:
+         `X_train = np.nan_to_num(np.asarray(X_train, dtype=float))`
+         `X_test = np.nan_to_num(np.asarray(X_test, dtype=float))`
+       - Use this dataset metadata to choose the most accurate loading logic:
+         {dataset_metadata}
    (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
    (6) Store the callable in variable `model_runner = run_{algorithm}`.
    (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
        You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
        If a parameter is not in the direct wrapper signature, do not pass it.
    (8) Run `train_scores = model_runner(X_train, **run_kwargs)` and `test_scores = model_runner(X_test, **run_kwargs)`.
-   (9) Convert outputs to 1D numpy float arrays and validate lengths.
+   (9) Convert wrapper outputs to sample-level 1D numpy float score arrays and validate lengths.
+       Do not blindly flatten 2D outputs. Use a helper such as:
+       `def to_sample_scores(raw_scores, n_samples):`
+       `    arr = np.asarray(raw_scores, dtype=float)`
+       `    if arr.ndim == 2 and arr.shape[0] == n_samples:`
+       `        return np.linalg.norm(arr, axis=1)`
+       `    arr = arr.reshape(-1)`
+       `    if len(arr) != n_samples:`
+       `        raise ValueError(f"Score length {{len(arr)}} does not match sample count {{n_samples}}")`
+       `    return arr`
+       Apply it as `train_scores = to_sample_scores(train_scores, len(X_train))` and `test_scores = to_sample_scores(test_scores, len(X_test))`.
    (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score`.
    (11) Print metrics exactly in this format:
        AUROC: 0.1234
@@ -212,18 +237,27 @@ You are an expert Python developer with deep experience in time-series anomaly d
        - Support CSV files with value columns and optional label columns.
        - Support `.npy` datasets and legacy dataset roots by resolving companion `_train.npy` files.
        - Drop timestamp-like columns from CSV feature matrices.
+       - Convert `X_train` to a numeric numpy array and clean missing values before calling the wrapper:
+         `X_train = np.nan_to_num(np.asarray(X_train, dtype=float))`
+       - Use this dataset metadata to choose the most accurate loading logic:
+         {dataset_metadata}
    (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
    (6) Store the callable in variable `model_runner = run_{algorithm}`.
    (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
        You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
        If a parameter is not in the direct wrapper signature, do not pass it.
    (8) Run `scores = model_runner(X_train, **run_kwargs)`.
-   (9) Convert outputs to a 1D numpy float array and validate its length.
+   (9) Convert outputs to a sample-level 1D numpy float score array and validate its length.
+       If the wrapper returns a tuple/list, choose the element that is a numeric score vector whose length matches `len(X_train)`.
+       Do not blindly flatten 2D outputs. If `scores` is a 2D array with `scores.shape[0] == len(X_train)`, convert it with `np.linalg.norm(scores, axis=1)`.
+       If the final score length does not equal `len(X_train)`, raise a `ValueError` instead of continuing.
    (10) Print metrics exactly:
        AUROC: -1
        AUPRC: -1
-   (11) Print detected outliers exactly as:
-       `Detected outlier at point [xx, xx, ...]`
+   (11) Detect outliers with a robust threshold such as the 95th percentile of `scores`.
+       Print the detected outlier indices as one list exactly as:
+       `Detected outlier at point [0, 5, 12]`
+       Use `outliers.tolist()` for this unlabeled TSB-AD output format.
 
 IMPORTANT:
 - Produce only executable Python code.
@@ -257,108 +291,20 @@ Strict rules:
 1. Preserve the overall script structure whenever possible.
 2. Do not rewrite the script from scratch unless the original code is fundamentally broken.
 3. Do not change `cwd` unless the error explicitly proves that the current working directory is wrong.
-4. If the script already uses `subprocess.run(cmd, check=True, cwd="./Time-Series-Library")`, keep it unchanged.
-5. Do not replace `run.py` with shell script paths such as `.sh`.
-6. Do not change paths to `scripts/...` unless the original code already used them.
-7. Do not invent unrelated path changes.
-8. If the error is about CUDA, GPU availability, or Torch GPU support, fix GPU-related command arguments instead of changing paths.
-9. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
-10. Keep all valid existing arguments unless the error indicates one of them is the cause.
-11. Do not introduce markdown fences, explanations, or comments.
-12. If the script uses a TSB-AD direct wrapper such as `run_TranAD` or `run_OmniAnomaly`, preserve that direct wrapper import and call style.
-13. If the error is `unexpected keyword argument`, remove or filter unsupported keyword arguments using the direct wrapper signature instead of inventing replacement parameter names.
+4. Do not invent unrelated path changes.
+5. If the error is about CUDA, GPU availability, or Torch GPU support, fix only the GPU-related argument or device setting.
+6. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
+7. Keep all valid existing arguments unless the error indicates one of them is the cause.
+8. Do not introduce markdown fences, explanations, or comments.
+9. If the script uses a TSB-AD direct wrapper such as `run_IForest` or `run_RobustPCA`, preserve that direct wrapper import and call style.
+10. If the error is `unexpected keyword argument`, remove or filter unsupported keyword arguments using the direct wrapper signature instead of inventing replacement parameter names.
+11. Keep the script self-contained for sandbox execution. Do not import or use `DataLoader`, and do not depend on generated loader files such as `train_data_loader.py` or `test_data_loader.py`; load dataset files directly instead.
+12. For unlabeled TSB-AD anomaly outputs, print detected outlier indices as one list using the format `Detected outlier at point [0, 5, 12]`.
+13. For TSB-AD scripts, clean missing feature values with `np.nan_to_num(np.asarray(X, dtype=float))` before calling the model wrapper.
+14. For TSB-AD scripts, normalize wrapper outputs to sample-level scores before thresholding: do not blindly flatten 2D arrays; if a 2D score matrix has one row per sample, use `np.linalg.norm(scores, axis=1)`, then require `len(scores) == len(X_train)` or the matching test set length.
 
 Return only executable Python code.
 """)
-
-
-template_tslib_labeled = PromptTemplate.from_template("""
-You are an expert Python developer using **Time-Series-Library** for anomaly detection.
-
-Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
-
---- BEGIN DOCUMENTATION ---
-{algorithm_doc}
---- END DOCUMENTATION ---
-
-The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
-
-Your job:
-1. Start from the official CLI arguments in the documentation for `{algorithm}`.
-2. Modify only the parameters that must change for the current task.
-3. Output Python code only, with no explanations, comments, or markdown fences.
-
-Required changes for the current task:
-1. Build a `cmd` list for:
-   - `"python", "-u", "run.py"`
-2. The script must execute `run.py` with:
-   - `check=True`
-   - `cwd="./Time-Series-Library"`
-3. Infer the dataset information from the provided file paths:
-   - train file: `{data_path_train}`
-   - test file: `{data_path_test}`
-4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset files and model `{algorithm}`.
-5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
-
-Environment requirement:
-- The generated script must run correctly in an environment where CUDA may be unavailable.
-- Do not rely on GPU availability.
-- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
-- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
-
-Constraints:
-1. Prefer the official arguments from the documentation over guessed defaults.
-2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
-3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
-4. At the top of the script, import `os` and `subprocess`.
-5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
-
-Return one executable Python script and nothing else.
-""")
-
-template_tslib_unlabeled = PromptTemplate.from_template("""
-You are an expert Python developer using **Time-Series-Library** for anomaly detection.
-
-Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
-
---- BEGIN DOCUMENTATION ---
-{algorithm_doc}
---- END DOCUMENTATION ---
-
-The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
-
-Your job:
-1. Start from the official CLI arguments in the documentation for `{algorithm}`.
-2. Modify only the parameters that must change for the current task.
-3. Output Python code only, with no explanations, comments, or markdown fences.
-
-Required changes for the current task:
-1. Build a `cmd` list for:
-   - `"python", "-u", "run.py"`
-2. The script must execute `run.py` with:
-   - `check=True`
-   - `cwd="./Time-Series-Library"`
-3. Infer the dataset information from the provided input file path:
-   - input file: `{data_path_train}`
-4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset file and model `{algorithm}`.
-5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
-
-Environment requirement:
-- The generated script must run correctly in an environment where CUDA may be unavailable.
-- Do not rely on GPU availability.
-- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
-- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
-
-Constraints:
-1. Prefer the official arguments from the documentation over guessed defaults.
-2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
-3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
-4. At the top of the script, import `os` and `subprocess`.
-5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
-
-Return one executable Python script and nothing else.
-""")
-
 
 template_darts_labeled = PromptTemplate.from_template("""
 You are an expert Python developer with deep knowledge of the **Darts** library for forecasting-based time-series anomaly detection. Your task is to:
@@ -507,7 +453,8 @@ class AgentCodeGenerator:
         data_path_test,
         algorithm_doc,
         input_parameters,
-        package_name
+        package_name,
+        dataset_metadata=None
     ) -> str:
         tpl = None
        
@@ -517,8 +464,6 @@ class AgentCodeGenerator:
             tpl = template_pygod_labeled if data_path_test else template_pygod_unlabeled
         elif package_name == "tsb_ad":
             tpl = template_tsb_ad_labeled if data_path_test else template_tsb_ad_unlabeled
-        elif package_name == "tslib": # tslib only has labeled data
-            tpl = template_tslib_labeled if data_path_test else template_tslib_unlabeled
         else:
             tpl = template_darts_labeled if data_path_test else template_darts_unlabeled
         raw = llm.invoke(
@@ -527,7 +472,8 @@ class AgentCodeGenerator:
                 "data_path_train": data_path_train,
                 "data_path_test": data_path_test,
                 "algorithm_doc": algorithm_doc,
-                "parameters": str(input_parameters)
+                "parameters": str(input_parameters),
+                "dataset_metadata": json.dumps(dataset_metadata or {}, default=str, indent=2)
             })
         ).content
         cleaned = self._clean(raw)
@@ -559,64 +505,6 @@ class AgentCodeGenerator:
         return re.sub(r"```", "", code).strip()
 
     @staticmethod
-    def _sanitize_tslib_args(code: str) -> str:
-        """
-        Remove known unsupported tslib CLI args and normalize GPU flags.
-        This is a post-generation safety net for run.py argparse compatibility.
-        """
-        if "run.py" not in code:
-            return code
-
-        # Remove unsupported argument/value pairs when present in cmd lists.
-        for arg in ("fc_dropout", "head_dropout", "stride", "file_name"):
-            code = re.sub(
-                rf',\s*["\']--{arg}["\']\s*,\s*["\'][^"\']*["\']',
-                "",
-                code,
-            )
-
-        # Convert `--use_gpu`, "False" into `--no_use_gpu`.
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*["\']False["\']',
-            ', "--no_use_gpu"',
-            code,
-            flags=re.IGNORECASE,
-        )
-        # Handle lowercase false if unquoted token sneaks in list.
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*False',
-            ', "--no_use_gpu"',
-            code,
-        )
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*["\']false["\']',
-            ', "--no_use_gpu"',
-            code,
-            flags=re.IGNORECASE,
-        )
-
-        # Ensure run.py is referenced relative to the Time-Series-Library cwd.
-        code = code.replace("./Time-Series-Library/run.py", "run.py")
-
-        # Ensure run.py executes inside Time-Series-Library so exp_basic can find ./models.
-        # Covers both `subprocess.run(cmd)` and `subprocess.run(cmd, ...)` forms.
-        if "subprocess.run(cmd" in code:
-            def _add_cwd_if_missing(m):
-                args = m.group(1) or ""
-                if "cwd=" in args:
-                    return m.group(0)
-                if args.strip():
-                    return f'subprocess.run(cmd,{args}, cwd="./Time-Series-Library")'
-                return 'subprocess.run(cmd, cwd="./Time-Series-Library")'
-
-            code = re.sub(
-                r"subprocess\.run\(\s*cmd\s*(?:,\s*([^)]*))?\)",
-                _add_cwd_if_missing,
-                code,
-            )
-        return code
-
-    @staticmethod
     def _extract_init_params_dict(response_text: str) -> dict:
         """
         Extract the dictionary in the first code block from the string, returning a Python dictionary object.
@@ -640,9 +528,9 @@ if __name__ == "__main__":
   from agents.agent_selector import AgentSelector
   from agents.agent_info_miner import AgentInfoMiner
   user_input = {
-      "algorithm": ["Crossformer"],
-      "dataset_train": "SMAP_train.npy",
-      "dataset_test": "SMAP_test.npy",
+      "algorithm": ["IForest"],
+      "dataset_train": "demo_train.npy",
+      "dataset_test": "demo_test.npy",
       "parameters": {}
   }
   agentSelector = AgentSelector(user_input=user_input)# if want to unit test, please import AgentSelector

@@ -50,6 +50,7 @@ Follow the **ReAct** loop **STRICTLY** – each response must be *Either*:
 
 IMPORTANT:
 1. Do not input `default` in the parameters, use the default values from the code.
+2. Keep scripts self-contained for sandbox execution. Do not introduce generated loader-file dependencies.
 """
 )
 
@@ -178,11 +179,6 @@ class AgentOptimizer:
         f1 = quality.f1
         specificity = quality.specificity
         sensitivity = quality.sensitivity
-        if package_name == "tslib":
-            accuracy = self._find_float(r"Accuracy\s*:\s*([0-9.]+)", final_output, default=quality.accuracy)
-            specificity = self._find_float(r"Precision\s*:\s*([0-9.]+)", final_output, default=quality.specificity)
-            sensitivity = self._find_float(r"Recall\s*:\s*([0-9.]+)", final_output, default=quality.sensitivity)
-            f1 = self._find_float(r"F-score\s*:\s*([0-9.]+)", final_output, default=quality.f1)
         error_points = self._parse_errors(final_output)
 
         return CodeQuality(
@@ -214,17 +210,17 @@ if __name__ == "__main__":
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data_loader.data_loader import DataLoader
+import scipy.io
 from pyod.models.abod import ABOD
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-# Initialize DataLoader
-dataloader_train = DataLoader(filepath='./data/glass_train.mat', store_script=True, store_path='train_data_loader.py')
-dataloader_test = DataLoader(filepath='./data/glass_test.mat', store_script=True, store_path='test_data_loader.py')
-
-# Load data
-X_train, y_train = dataloader_train.load_data(split_data=False)
-X_test, y_test = dataloader_test.load_data(split_data=False)
+# Load data directly so the script is sandbox-friendly
+train_data = scipy.io.loadmat('./data/glass_train.mat')
+test_data = scipy.io.loadmat('./data/glass_test.mat')
+X_train = train_data['X']
+y_train = train_data['y'].ravel()
+X_test = test_data['X']
+y_test = test_data['y'].ravel()
 
 # Initialize ABOD
 model = ABOD()
