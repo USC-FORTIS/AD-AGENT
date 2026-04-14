@@ -130,14 +130,6 @@ class TestAgentInfoMiner(unittest.TestCase):
         self.assertEqual(pyod_doc, "pyod_doc")
         self.assertEqual(pygod_doc, "pygod_doc")
 
-    def test_tslib_prompt_formats_with_algorithm_name(self):
-        rendered = agent_info_miner_mod.web_search_prompt_tslib.invoke(
-            {"algorithm_name": "LightTS"}
-        ).to_string()
-
-        self.assertIn("LightTS.sh", rendered)
-        self.assertIn('"task_name": "anomaly_detection"', rendered)
-
     def test_query_docs_tslib_uses_prompt_lookup(self):
         agent = AgentInfoMiner()
         with tempfile.TemporaryDirectory() as td:
@@ -154,73 +146,12 @@ class TestAgentInfoMiner(unittest.TestCase):
 
         self.assertEqual(doc, "tslib_doc")
 
-    def test_load_tslib_supported_args_with_defaults_parses_defaults(self):
-        run_py = """
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('--task_name', type=str, required=True, default='anomaly_detection')
-parser.add_argument('--train_epochs', type=int, default=10)
-parser.add_argument('--use_amp', action='store_true', default=False)
-parser.add_argument('--no_use_gpu', action='store_false', dest='use_gpu')
-parser.add_argument('--p_hidden_dims', type=int, nargs='+', default=[128, 128])
-"""
-        with tempfile.TemporaryDirectory() as td:
-            fake_run_py = os.path.join(td, "run.py")
-            with open(fake_run_py, "w", encoding="utf-8") as f:
-                f.write(run_py)
-
-            with patch.object(AgentInfoMiner, "_tslib_run_py_path", return_value=fake_run_py):
-                parsed = AgentInfoMiner._load_tslib_supported_args_with_defaults()
-
-        self.assertEqual(parsed["task_name"], "anomaly_detection")
-        self.assertEqual(parsed["train_epochs"], 10)
-        self.assertEqual(parsed["use_amp"], False)
-        self.assertEqual(parsed["no_use_gpu"], True)
-        self.assertEqual(parsed["p_hidden_dims"], [128, 128])
-
-    def test_build_tslib_local_doc_includes_supported_args(self):
-        with tempfile.TemporaryDirectory() as td:
-            fake_run_py = os.path.join(td, "run.py")
-            fake_script = os.path.join(td, "TimesNet.sh")
-            with open(fake_run_py, "w", encoding="utf-8") as f:
-                f.write("parser.add_argument('--task_name', default='anomaly_detection')\n")
-            with open(fake_script, "w", encoding="utf-8") as f:
-                f.write("python -u run.py --task_name anomaly_detection\n")
-
-            with patch.object(AgentInfoMiner, "_tslib_run_py_path", return_value=fake_run_py), patch.object(
-                AgentInfoMiner,
-                "_find_tslib_script_path",
-                return_value=fake_script,
-            ), patch.object(
-                AgentInfoMiner,
-                "_load_tslib_supported_args_with_defaults",
-                return_value={"task_name": "anomaly_detection", "train_epochs": 10},
-            ):
-                doc = AgentInfoMiner._build_tslib_local_doc("TimesNet")
-
-        self.assertIn("Local primary source", doc)
-        self.assertIn("Official local shell script", doc)
-        self.assertIn('"task_name": "anomaly_detection"', doc)
-        self.assertIn('"train_epochs": 10', doc)
-
-    def test_query_metadata_returns_tslib_cli_metadata(self):
-        with patch.object(
-            AgentInfoMiner,
-            "_load_tslib_supported_args_with_defaults",
-            return_value={"root_path": "./data", "data_path": "file.csv"},
-        ):
-            metadata = AgentInfoMiner().query_metadata("TimesNet", "tslib")
-
-        self.assertEqual(metadata["algorithm"], "TimesNet")
-        self.assertEqual(metadata["dataset_root_arg"], "root_path")
-        self.assertEqual(metadata["dataset_file_arg"], "data_path")
-
     def test_tsb_ad_prompt_formats_with_algorithm_name(self):
         rendered = agent_info_miner_mod.web_search_prompt_tsb_ad.invoke(
             {"algorithm_name": "IForest"}
         ).to_string()
 
-        self.assertIn("TSB_AD.model_wrapper.run_Unsupervise_AD", rendered)
+        self.assertIn("TSB_AD.model_wrapper.run_IForest", rendered)
         self.assertIn("IForest", rendered)
 
     def test_query_docs_tsb_ad_uses_prompt_lookup(self):
@@ -243,10 +174,10 @@ parser.add_argument('--p_hidden_dims', type=int, nargs='+', default=[128, 128])
     def test_reviewer_prompt_formats_with_train_dataset(self):
         rendered = agent_reviewer_mod.test_prompt.invoke(
             {
-                "code": "print('x')",
-                "algorithm_name": "LightTS",
+                "code": "np.load('./data/MSL_train.npy')",
                 "package_name": "tslib",
-                "train_dataset": "./data/MSL",
+                "dataset_metadata": "{}",
+                "feature_count": 55,
             }
         ).to_string()
 

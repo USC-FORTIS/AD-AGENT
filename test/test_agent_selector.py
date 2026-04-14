@@ -7,7 +7,7 @@ from agent_test_stubs import install_common_stubs, load_real_agent_module
 install_common_stubs()
 agent_selector_mod = load_real_agent_module("agents.agent_selector")
 AgentSelector = agent_selector_mod.AgentSelector
-algorithm_registry = load_real_agent_module("utils.tsb_ad_registry")
+algorithm_registry = load_real_agent_module("utils.algorithm_registry")
 
 
 class TestAgentSelector(unittest.TestCase):

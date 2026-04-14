@@ -20,6 +20,32 @@ class TestAgentProcessorRunChatbot(unittest.TestCase):
         self.addCleanup(self._print_patcher.stop)
 
     def test_run_chatbot_single_valid_input(self):
+        # ECOD is a pyod-only algorithm, not in Unsupervise_AD_Pool or Semisupervise_AD_Pool,
+        # so both train and test datasets must be preserved unchanged.
+        processor = AgentProcessor()
+
+        with patch("builtins.input", side_effect=["Run ECOD on train and test"]), \
+             patch.object(processor, "get_chatgpt_response", return_value="ok"), \
+             patch.object(
+                 processor,
+                 "extract_config",
+                 return_value={
+                     "algorithm": ["ECOD"],
+                     "dataset_train": "./data/glass_train.mat",
+                     "dataset_test": "./data/glass_test.mat",
+                     "parameters": {"contamination": 0.1},
+                 },
+             ), \
+             patch("os.path.exists", side_effect=lambda p: p in {"./data/glass_train.mat", "./data/glass_test.mat"}):
+            processor.run_chatbot()
+
+        self.assertEqual(processor.experiment_config["algorithm"], ["ECOD"])
+        self.assertEqual(processor.experiment_config["dataset_train"], "./data/glass_train.mat")
+        self.assertEqual(processor.experiment_config["dataset_test"], "./data/glass_test.mat")
+        self.assertEqual(processor.experiment_config["parameters"], {"contamination": 0.1})
+
+    def test_run_chatbot_unsupervised_clears_test_dataset(self):
+        # Unsupervised algorithms (in Unsupervise_AD_Pool) must not accept a test dataset.
         processor = AgentProcessor()
 
         with patch("builtins.input", side_effect=["Run IForest on train and test"]), \
@@ -31,16 +57,14 @@ class TestAgentProcessorRunChatbot(unittest.TestCase):
                      "algorithm": ["IForest"],
                      "dataset_train": "./data/glass_train.mat",
                      "dataset_test": "./data/glass_test.mat",
-                     "parameters": {"contamination": 0.1},
+                     "parameters": {},
                  },
              ), \
              patch("os.path.exists", side_effect=lambda p: p in {"./data/glass_train.mat", "./data/glass_test.mat"}):
             processor.run_chatbot()
 
-        self.assertEqual(processor.experiment_config["algorithm"], ["IForest"])
         self.assertEqual(processor.experiment_config["dataset_train"], "./data/glass_train.mat")
-        self.assertEqual(processor.experiment_config["dataset_test"], "./data/glass_test.mat")
-        self.assertEqual(processor.experiment_config["parameters"], {"contamination": 0.1})
+        self.assertEqual(processor.experiment_config["dataset_test"], "")
 
     def test_run_chatbot_skips_empty_input(self):
         processor = AgentProcessor()
