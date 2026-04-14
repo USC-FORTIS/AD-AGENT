@@ -10,7 +10,11 @@ AgentProcessor - Using Few-shot Chain-of-Thought (CoT) Extraction
 import os
 import re
 import json
+import sys
 import openai
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.tsb_ad_registry import Unsupervise_AD_Pool, Semisupervise_AD_Pool
 
 
 class AgentProcessor:
@@ -188,6 +192,26 @@ class AgentProcessor:
                 self.experiment_config["dataset_test"] = ""
             if extracted.get("parameters"):
                 self.experiment_config["parameters"].update(extracted["parameters"])
+
+            # If all specified algorithms are unsupervised, test dataset is not allowed
+            algorithms = self.experiment_config["algorithm"]
+            if algorithms and all(a in Unsupervise_AD_Pool for a in algorithms):
+                if self.experiment_config["dataset_test"]:
+                    print(
+                        "Chatbot: The selected algorithm(s) are unsupervised and do not "
+                        "accept a test dataset. The test dataset input has been ignored."
+                    )
+                    self.experiment_config["dataset_test"] = ""
+
+            # If all specified algorithms are semisupervised and only train dataset provided,
+            # set test dataset to the same as train dataset
+            if algorithms and all(a in Semisupervise_AD_Pool for a in algorithms):
+                if not self.experiment_config["dataset_test"]:
+                    self.experiment_config["dataset_test"] = self.experiment_config["dataset_train"]
+                    print(
+                        "Chatbot: The selected algorithm(s) are semisupervised but no test "
+                        "dataset was provided. Test dataset has been set to the training dataset."
+                    )
 
             # Missing field guidance
             # if not self.experiment_config["algorithm"]:

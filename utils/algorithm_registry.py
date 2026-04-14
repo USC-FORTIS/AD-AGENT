@@ -1,14 +1,71 @@
-Unsupervise_AD_Pool = [
-    'FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF',
-    'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 'Sub_HBOS', 'KNN', 'Sub_KNN',
-    'KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA',
-    'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS',
+PYOD_ALGORITHMS = [
+    "ECOD",
+    "ABOD",
+    "FastABOD",
+    "COPOD",
+    "MAD",
+    "SOS",
+    "QMCD",
+    "KDE",
+    "Sampling",
+    "GMM",
+    "PCA",
+    "KPCA",
+    "MCD",
+    "CD",
+    "OCSVM",
+    "LMDD",
+    "LOF",
+    "COF",
+    "(Incremental) COF",
+    "CBLOF",
+    "LOCI",
+    "HBOS",
+    "kNN",
+    "AvgKNN",
+    "MedKNN",
+    "SOD",
+    "ROD",
+    "IForest",
+    "INNE",
+    "DIF",
+    "FeatureBagging",
+    "LSCP",
+    "XGBOD",
+    "LODA",
+    "SUOD",
+    "AutoEncoder",
+    "VAE",
+    "Beta-VAE",
+    "SO_GAAL",
+    "MO_GAAL",
+    "DeepSVDD",
+    "AnoGAN",
+    "ALAD",
+    "AE1SVM",
+    "DevNet",
+    "R-Graph",
+    "LUNAR",
 ]
 
-Semisupervise_AD_Pool = [
-    'Left_STAMPi', 'SAND', 'MCD', 'Sub_MCD', 'OCSVM', 'Sub_OCSVM', 'AutoEncoder',
-    'CNN', 'LSTMAD', 'TranAD', 'USAD', 'OmniAnomaly', 'AnomalyTransformer',
-    'TimesNet', 'FITS', 'Donut', 'OFA', 'MOMENT_FT',
+PYGOD_ALGORITHMS = [
+    "SCAN",
+    "GAE",
+    "Radar",
+    "ANOMALOUS",
+    "ONE",
+    "DOMINANT",
+    "DONE",
+    "AdONE",
+    "AnomalyDAE",
+    "GAAN",
+    "DMGD",
+    "OCGNN",
+    "CoLA",
+    "GUIDE",
+    "CONAD",
+    "GADNR",
+    "CARD",
 ]
 
 TSB_AD_ALGORITHM_DESCRIPTIONS = {
@@ -82,11 +139,18 @@ TSB_AD_SINGLE_INPUT_ALGORITHMS = [
 ]
 
 TSB_AD_MODEL_SELECTION_CANDIDATES = TSB_AD_SINGLE_INPUT_ALGORITHMS
-
-# Semisupervised algorithms require separate train/test datasets
-TSB_AD_SEMISUPERVISE_ALGORITHMS = Semisupervise_AD_Pool
 def normalize_algorithm_name(name: str) -> str:
     return "".join(ch.lower() for ch in str(name) if ch.isalnum())
+
+
+def is_pyod_algorithm(name: str) -> bool:
+    normalized = normalize_algorithm_name(name)
+    return any(normalize_algorithm_name(candidate) == normalized for candidate in PYOD_ALGORITHMS)
+
+
+def is_pygod_algorithm(name: str) -> bool:
+    normalized = normalize_algorithm_name(name)
+    return any(normalize_algorithm_name(candidate) == normalized for candidate in PYGOD_ALGORITHMS)
 
 
 def _import_model_wrapper():

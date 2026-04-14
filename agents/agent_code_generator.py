@@ -7,7 +7,7 @@ import re
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
-from utils.tsb_ad_registry import get_installed_tsb_ad_algorithms
+from utils.tsb_ad_registry import get_installed_tsb_ad_algorithms, Unsupervise_AD_Pool
 import subprocess
 from datetime import datetime, timedelta
 from config.config import Config
@@ -187,8 +187,15 @@ You are an expert Python developer with deep experience in time-series anomaly d
    (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
        You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
        If a parameter is not in the direct wrapper signature, do not pass it.
-   (8) Run `train_scores = model_runner(X_train, **run_kwargs)` and `test_scores = model_runner(X_test, **run_kwargs)`.
-   (9) Convert wrapper outputs to sample-level 1D numpy float score arrays and validate lengths.
+   (8) The semisupervised wrapper takes both datasets in a single call:
+       `scores = model_runner(X_train, X_test, **run_kwargs)`
+       This returns a 1D anomaly score array for X_test only (length == len(X_test)).
+       Do NOT call the wrapper twice (once for train, once for test).
+       Some wrappers (e.g. SAND) only support univariate data internally. If `{algorithm}` is known to be univariate-only (uses `find_length_rank` + `.squeeze()` internally), reduce multivariate inputs to 1D first:
+       `X_train_in = X_train[:, 0] if X_train.ndim == 2 else X_train`
+       `X_test_in = X_test[:, 0] if X_test.ndim == 2 else X_test`
+       and call `scores = model_runner(X_train_in, X_test_in, **run_kwargs)`.
+   (9) Convert the wrapper output to a sample-level 1D numpy float score array and validate its length.
        Do not blindly flatten 2D outputs. Use a helper such as:
        `def to_sample_scores(raw_scores, n_samples):`
        `    arr = np.asarray(raw_scores, dtype=float)`
@@ -198,18 +205,18 @@ You are an expert Python developer with deep experience in time-series anomaly d
        `    if len(arr) != n_samples:`
        `        raise ValueError(f"Score length {{len(arr)}} does not match sample count {{n_samples}}")`
        `    return arr`
-       Apply it as `train_scores = to_sample_scores(train_scores, len(X_train))` and `test_scores = to_sample_scores(test_scores, len(X_test))`.
-   (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score`.
+       Apply it as `scores = to_sample_scores(scores, len(X_test))`.
+   (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score` with `scores` vs `y_test`.
    (11) Print metrics exactly in this format:
        AUROC: 0.1234
        AUPRC: 0.5678
-   (12) Threshold test scores using the 95th percentile of training scores and print mismatches exactly as:
+   (12) Threshold scores using the 95th percentile and print mismatches exactly as:
        `Failed prediction at point [xx, xx, ...] with true label z`
 
 IMPORTANT:
 - Produce only executable Python code.
 - Do not use subprocess.
-- Do not use `run_Unsupervise_AD`; call the direct wrapper for `{algorithm}` instead.
+- Do not use `run_Semisupervise_AD`; call the direct wrapper for `{algorithm}` instead.
 - Do not invent unsupported arguments or unsupported TSB-AD APIs.
 - Keep the script robust to both CSV and `.npy`-style time-series inputs.
 """)
@@ -302,6 +309,11 @@ Strict rules:
 12. For unlabeled TSB-AD anomaly outputs, print detected outlier indices as one list using the format `Detected outlier at point [0, 5, 12]`.
 13. For TSB-AD scripts, clean missing feature values with `np.nan_to_num(np.asarray(X, dtype=float))` before calling the model wrapper.
 14. For TSB-AD scripts, normalize wrapper outputs to sample-level scores before thresholding: do not blindly flatten 2D arrays; if a 2D score matrix has one row per sample, use `np.linalg.norm(scores, axis=1)`, then require `len(scores) == len(X_train)` or the matching test set length.
+15. If the error is `ValueError: range() arg 3 must not be zero` in a TSB-AD wrapper (e.g. run_SAND), it means the algorithm only supports univariate (1D) data but received multivariate (2D) data. The internal `find_length_rank` returns 0 on 2D arrays, making `overlaping_rate=0`. Fix by extracting the first channel before calling the wrapper:
+    `X_train_1d = X_train[:, 0] if X_train.ndim == 2 else X_train`
+    `X_test_1d = X_test[:, 0] if X_test.ndim == 2 else X_test`
+    Then call `scores = model_runner(X_train_1d, X_test_1d, **run_kwargs)`.
+    Keep `X_train` and `X_test` 2D for all other purposes (e.g. `len()`, `shape`). Do NOT remove the `data_test` argument.
 
 Return only executable Python code.
 """)
@@ -463,7 +475,7 @@ class AgentCodeGenerator:
         elif package_name == "pygod":
             tpl = template_pygod_labeled if data_path_test else template_pygod_unlabeled
         elif package_name == "tsb_ad":
-            tpl = template_tsb_ad_labeled if data_path_test else template_tsb_ad_unlabeled
+            tpl = template_tsb_ad_unlabeled if algorithm in Unsupervise_AD_Pool else template_tsb_ad_labeled
         else:
             tpl = template_darts_labeled if data_path_test else template_darts_unlabeled
         raw = llm.invoke(

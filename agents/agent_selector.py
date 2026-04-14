@@ -11,7 +11,8 @@ from ad_model_selection.prompts.pygod_ms_prompt import generate_model_selection_
 from ad_model_selection.prompts.pyod_ms_prompt import generate_model_selection_prompt_from_pyod
 from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection_prompt_from_tsb_ad
 from utils.openai_client import query_openai
-from utils.tsb_ad_registry import PYGOD_ALGORITHMS, PYOD_ALGORITHMS, TSB_AD_SINGLE_INPUT_ALGORITHMS
+from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, Unsupervise_AD_Pool
+from utils.algorithm_registry import PYGOD_ALGORITHMS, PYOD_ALGORITHMS
 import json
 
 class AgentSelector:
@@ -111,8 +112,9 @@ class AgentSelector:
             dim = self.X_train.shape[1]
           ts_type = "multivariate" if dim > 1 else "univariate"
           num_signals = len(self.X_train) if self.X_train is not None else 0
+          has_test = bool(self.data_path_test and self.X_test is not None)
           messages = generate_model_selection_prompt_from_tsb_ad(
-            name, num_signals, dim, ts_type
+            name, num_signals, dim, ts_type, has_test_dataset=has_test
           )
           content = query_openai(messages, model="o4-mini")
           algorithm = json.loads(content)["choice"]
@@ -123,6 +125,21 @@ class AgentSelector:
         self.tools = [algorithm]
 
         print('Selector Parameters:', self.parameters)
+
+      # Apply dataset routing based on algorithm type (tsb_ad only)
+      if self.package_name == "tsb_ad" and self.algorithm:
+        final_algo = self.algorithm[0] if len(self.algorithm) == 1 else None
+        if final_algo and final_algo in Unsupervise_AD_Pool:
+          # Unsupervised: test dataset must mirror train dataset
+          if self.X_test is None:
+            self.X_test = self.X_train
+            self.y_test = self.y_train
+            self.test_metadata = self.train_metadata
+            print(f"Unsupervised algorithm '{final_algo}': test dataset set to train dataset.")
+        else:
+          # Semisupervised: train and test datasets are set as-is (already loaded)
+          pass
+
       self.metadata.update({
         "algorithm": self.algorithm,
         "tools": self.tools,
