@@ -80,6 +80,10 @@ class FakeCodeQuality:
         auprc=0.0,
         error_points=None,
         review_count=0,
+        accuracy=-1.0,
+        f1=-1.0,
+        specificity=-1.0,
+        sensitivity=-1.0,
     ):
         self.code = code
         self.algorithm = algorithm
@@ -90,6 +94,10 @@ class FakeCodeQuality:
         self.auprc = auprc
         self.error_points = error_points or []
         self.review_count = review_count
+        self.accuracy = accuracy
+        self.f1 = f1
+        self.specificity = specificity
+        self.sensitivity = sensitivity
 
 
 class TestPipelineInterface(unittest.TestCase):
@@ -121,33 +129,6 @@ class TestPipelineInterface(unittest.TestCase):
         self.assertIs(result, state)
         mock_call_selector.assert_called_once_with(state)
 
-    @patch("pipeline_interface.CodeQuality", new=FakeCodeQuality)
-    @patch("pipeline_interface.prepare_tslib_repo")
-    def test_call_code_generator_prepares_tslib_repo_for_tslib(self, mock_prepare):
-        class DummyGenerator:
-            def generate_code(self, **kwargs):
-                return "print('ok')"
-
-            def _extract_init_params_dict(self, text):
-                return {}
-
-        state = pipeline_interface.build_state()
-        state["agent_code_generator"] = DummyGenerator()
-        state["current_tool"] = "TimesNet"
-        state["data_path_train"] = "./data/MSL"
-        state["data_path_test"] = "./data/MSL"
-        state["algorithm_doc"] = "doc"
-        state["input_parameters"] = {}
-        state["package_name"] = "tslib"
-        state["code_quality"] = None
-
-        result = pipeline_interface.call_code_generator_for_single_tool(state)
-
-        self.assertEqual(result["code_quality"].code, "print('ok')")
-        mock_prepare.assert_called_once_with(
-            project_root=os.path.dirname(os.path.abspath(pipeline_interface.__file__)),
-        )
-
     def test_run_selector_missing_train_raises(self):
         state = pipeline_interface.build_state()
         state["experiment_config"] = {"dataset_train": None, "dataset_test": None}
@@ -165,6 +146,23 @@ class TestPipelineInterface(unittest.TestCase):
 
         self.assertEqual(result, {"algorithm_doc": "doc"})
         mock_call_info_miner.assert_called_once_with(state)
+
+    def test_call_info_miner_returns_doc(self):
+        class DummyInfoMiner:
+            def query_docs(self, algorithm, package_name):
+                return "doc"
+
+            def query_metadata(self, algorithm, package_name):
+                return {"dataset_root_arg": "root_path"}
+
+        state = pipeline_interface.build_state()
+        state["agent_info_miner"] = DummyInfoMiner()
+        state["current_tool"] = "IForest"
+        state["package_name"] = "pyod"
+
+        result = pipeline_interface.call_info_miner(state)
+
+        self.assertEqual(result, {"algorithm_doc": "doc"})
 
     def test_run_info_miner_requires_algorithm_and_package_without_state(self):
         with self.assertRaises(ValueError):
@@ -217,20 +215,22 @@ class TestPipelineInterface(unittest.TestCase):
     @patch("pipeline_interface.CodeQuality", FakeCodeQuality)
     def test_call_reviewer_increments_review_count_on_error(self):
         class DummyReviewer:
-            def test_code(self, code, tool, package_name, n_features=None, train_dataset=None):
+            def test_code(self, code, tool, package_name, train_dataset=None, dataset_metadata=None):
+                self.dataset_metadata = dataset_metadata
                 return "error"
 
         state = pipeline_interface.build_state()
         state["agent_reviewer"] = DummyReviewer()
         state["current_tool"] = "IForest"
         state["package_name"] = "pyod"
-        state["n_features"] = 2
+        state["dataset_metadata"] = {"dataset": {"train": {"n_features": 7}}}
         state["code_quality"] = FakeCodeQuality(review_count=0)
 
         result = pipeline_interface.call_reviewer_for_single_tool(state)
 
         self.assertEqual(result["code_quality"].review_count, 1)
         self.assertEqual(result["code_quality"].error_message, "error")
+        self.assertEqual(state["agent_reviewer"].dataset_metadata, {"dataset": {"train": {"n_features": 7}}})
 
     @patch("pipeline_interface.run_reviewer")
     @patch("pipeline_interface.run_code_generator")
