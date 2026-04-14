@@ -10,6 +10,7 @@ from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection
 from ad_model_selection.prompts.timeseries_ms_prompt import generate_model_selection_prompt_from_timeseries
 from utils.openai_client import query_openai
 from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, is_tsb_ad_algorithm
+from utils.algorithm_registry import PYOD_ALGORITHMS, PYGOD_ALGORITHMS
 
 # Known Time-Series-Library directory-based datasets
 _TSLIB_DIR_DATASETS = {"MSL", "PSM", "SMAP", "SMD", "SWaT"}
@@ -414,75 +415,9 @@ class AgentSelector:
         """Generates the tools for the agent."""
         if algorithm_input[0].lower() == "all":
             if self.package_name == "pygod":
-                return [
-                    "SCAN",
-                    "GAE",
-                    "Radar",
-                    "ANOMALOUS",
-                    "ONE",
-                    "DOMINANT",
-                    "DONE",
-                    "AdONE",
-                    "AnomalyDAE",
-                    "GAAN",
-                    "DMGD",
-                    "OCGNN",
-                    "CoLA",
-                    "GUIDE",
-                    "CONAD",
-                    "GADNR",
-                    "CARD",
-                ]
+                return list(PYGOD_ALGORITHMS)
             if self.package_name == "pyod":
-                return [
-                    "ECOD",
-                    "ABOD",
-                    "FastABOD",
-                    "COPOD",
-                    "MAD",
-                    "SOS",
-                    "QMCD",
-                    "KDE",
-                    "Sampling",
-                    "GMM",
-                    "PCA",
-                    "KPCA",
-                    "MCD",
-                    "CD",
-                    "OCSVM",
-                    "LMDD",
-                    "LOF",
-                    "COF",
-                    "(Incremental) COF",
-                    "CBLOF",
-                    "LOCI",
-                    "HBOS",
-                    "kNN",
-                    "AvgKNN",
-                    "MedKNN",
-                    "SOD",
-                    "ROD",
-                    "IForest",
-                    "INNE",
-                    "DIF",
-                    "FeatureBagging",
-                    "LSCP",
-                    "XGBOD",
-                    "LODA",
-                    "SUOD",
-                    "AutoEncoder",
-                    "VAE",
-                    "Beta-VAE",
-                    "SO_GAAL",
-                    "MO_GAAL",
-                    "DeepSVDD",
-                    "AnoGAN",
-                    "ALAD",
-                    "AE1SVM",
-                    "DevNet",
-                    "R-Graph",
-                    "LUNAR",
-                ]
+                return list(PYOD_ALGORITHMS)
             if self.package_name == "tsb_ad":
                 return list(TSB_AD_SINGLE_INPUT_ALGORITHMS)
             return [
