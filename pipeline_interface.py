@@ -383,7 +383,8 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
         tool,
         state["package_name"],
         state.get("feature_dim") or state.get("n_features"),
-        train_dataset=state["data_path_train"]
+        train_dataset=state["data_path_train"],
+        dataset_metadata=state.get("metadata"),
     )
 
     if cq.error_message:

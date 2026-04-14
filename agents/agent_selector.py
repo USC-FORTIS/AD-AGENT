@@ -6,11 +6,46 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ad_model_selection.prompts.pygod_ms_prompt import generate_model_selection_prompt_from_pygod
 from ad_model_selection.prompts.pyod_ms_prompt import generate_model_selection_prompt_from_pyod
+from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection_prompt_from_tsb_ad
 from ad_model_selection.prompts.timeseries_ms_prompt import generate_model_selection_prompt_from_timeseries
 from utils.openai_client import query_openai
+from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, is_tsb_ad_algorithm
 
 # Known Time-Series-Library directory-based datasets
 _TSLIB_DIR_DATASETS = {"MSL", "PSM", "SMAP", "SMD", "SWaT"}
+_TSLIB_ALGORITHMS = {
+    "Autoformer",
+    "DLinear",
+    "ETSformer",
+    "FEDformer",
+    "Informer",
+    "LightTS",
+    "Pyraformer",
+    "Reformer",
+    "TimesNet",
+    "Transformer",
+}
+_DARTS_ALGORITHMS = {
+    "GlobalNaiveAggregate",
+    "GlobalNaiveDrift",
+    "GlobalNaiveSeasonal",
+    "RNNModel",
+    "BlockRNNModel",
+    "NBEATSModel",
+    "NHiTSModel",
+    "TCNModel",
+    "TransformerModel",
+    "TFTModel",
+    "DLinearModel",
+    "NLinearModel",
+    "TiDEModel",
+    "TSMixerModel",
+    "LinearRegressionModel",
+    "RandomForest",
+    "LightGBMModel",
+    "XGBModel",
+    "CatBoostModel",
+}
 
 # ---------------------------------------------------------------------------
 # Deterministic metadata extraction scripts (executed in sandbox, no LLM)
@@ -103,6 +138,43 @@ except Exception as e:
     print("META:" + json.dumps({{"error": str(e)}}))
 '''
 
+_METADATA_SCRIPT_TSB_AD = '''\
+import json, os, numpy as np
+path = "{data_path}"
+ext = os.path.splitext(path)[1].lower()
+meta = {{"format": ext}}
+try:
+    if ext == ".csv":
+        import pandas as pd
+        df = pd.read_csv(path)
+        cols_lower = {{c.lower(): c for c in df.columns}}
+        time_keys = {{"timestamp", "time", "date", "datetime", "ts"}}
+        label_keys = {{"label", "anomaly", "target", "y", "class"}}
+        excluded = time_keys | label_keys
+        feature_cols = [
+            c for c in df.columns
+            if c.lower() not in excluded and pd.api.types.is_numeric_dtype(df[c])
+        ]
+        meta["num_samples"] = len(df)
+        meta["feature_dim"] = len(feature_cols)
+        meta["has_labels"] = bool(set(cols_lower) & label_keys)
+        meta["has_timestamps"] = bool(set(cols_lower) & time_keys)
+        meta["columns"] = list(df.columns)
+    elif ext == ".npz":
+        payload = np.load(path)
+        first_key = payload.files[0] if payload.files else None
+        arr = payload[first_key] if first_key else np.empty((0, 0))
+        meta["num_samples"] = int(arr.shape[0]) if arr.ndim else 0
+        meta["feature_dim"] = int(arr.shape[1]) if arr.ndim > 1 else 1
+    else:
+        arr = np.load(path)
+        meta["num_samples"] = int(arr.shape[0]) if arr.ndim else 0
+        meta["feature_dim"] = int(arr.shape[1]) if arr.ndim > 1 else 1
+    print("META:" + json.dumps(meta))
+except Exception as e:
+    print("META:" + json.dumps({{"error": str(e)}}))
+'''
+
 
 class AgentSelector:
     def __init__(self, user_input):
@@ -126,7 +198,10 @@ class AgentSelector:
     # Step 1: Detect package from file extension / directory name
     # ------------------------------------------------------------------
     @staticmethod
-    def _detect_package(train_path: str) -> str:
+    def _detect_package(train_path: str, algorithms: list[str] | None = None) -> str:
+        requested_package = AgentSelector._requested_package_from_algorithms(train_path, algorithms)
+        if requested_package:
+            return requested_package
         basename = os.path.basename(train_path.rstrip("/"))
         if basename in _TSLIB_DIR_DATASETS:
             return "tslib"
@@ -138,6 +213,29 @@ class AgentSelector:
         # .mat and .csv default to pyod; csv may be reclassified after metadata
         return "pyod"
 
+    @staticmethod
+    def _requested_package_from_algorithms(
+        train_path: str,
+        algorithms: list[str] | None,
+    ) -> str | None:
+        if not algorithms:
+            return None
+        normalized = [str(algo).strip() for algo in algorithms if str(algo).strip()]
+        if not normalized or normalized[0].lower() == "all":
+            return None
+
+        basename = os.path.basename(train_path.rstrip("/"))
+        ext = os.path.splitext(train_path)[1].lower()
+        time_series_like = basename in _TSLIB_DIR_DATASETS or ext in {".npy", ".npz", ".csv"}
+
+        if any(algo in _DARTS_ALGORITHMS for algo in normalized):
+            return "darts"
+        if any(algo in _TSLIB_ALGORITHMS for algo in normalized):
+            return "tslib"
+        if time_series_like and any(is_tsb_ad_algorithm(algo) for algo in normalized):
+            return "tsb_ad"
+        return None
+
     # ------------------------------------------------------------------
     # Step 2: Run a deterministic metadata-extraction script in sandbox
     # ------------------------------------------------------------------
@@ -148,7 +246,7 @@ class AgentSelector:
         """Detect package type and extract dataset metadata via sandbox."""
         from sandbox.executor import execute_code
 
-        self.package_name = self._detect_package(train_path)
+        self.package_name = self._detect_package(train_path, self.user_input.get("algorithm"))
         self.metadata = {}
 
         # tslib directory datasets have no single file to inspect
@@ -192,8 +290,8 @@ class AgentSelector:
         if self.package_name == "pyod" and self.metadata.get("has_timestamps"):
             self.package_name = "darts"
 
-        # Set tslib enc_in/c_out from feature_dim
-        if self.package_name == "tslib" and self.feature_dim and self.feature_dim > 0:
+        # Set time-series feature-dependent parameters from metadata
+        if self.package_name in {"tslib", "tsb_ad"} and self.feature_dim and self.feature_dim > 0:
             self.parameters["enc_in"] = self.feature_dim
             self.parameters["c_out"] = self.feature_dim
 
@@ -205,6 +303,8 @@ class AgentSelector:
         """Build a small Python script that inspects the data and prints JSON metadata."""
         if package_name == "pygod":
             return _METADATA_SCRIPT_PYGOD.format(data_path=train_path)
+        if package_name == "tsb_ad":
+            return _METADATA_SCRIPT_TSB_AD.format(data_path=train_path)
         if package_name == "tslib":
             return _METADATA_SCRIPT_TSLIB.format(data_path=train_path)
         # pyod handles both .mat and .csv
@@ -277,6 +377,19 @@ class AgentSelector:
             else:
                 algorithm = "DOMINANT"
 
+        elif self.package_name == "tsb_ad":
+            dim = meta.get("feature_dim")
+            num_signals = meta.get("num_samples")
+            if dim and num_signals:
+                ts_type = "multivariate" if dim > 1 else "univariate"
+                messages = generate_model_selection_prompt_from_tsb_ad(
+                    name, num_signals, dim, ts_type,
+                )
+                content = query_openai(messages, model="o4-mini")
+                algorithm = json.loads(content)["choice"]
+                print(f"Algorithm: {algorithm}")
+            else:
+                algorithm = "IForest"
         else:  # tslib / darts
             dim = meta.get("feature_dim")
             num_signals = meta.get("num_samples")
@@ -370,6 +483,8 @@ class AgentSelector:
                     "R-Graph",
                     "LUNAR",
                 ]
+            if self.package_name == "tsb_ad":
+                return list(TSB_AD_SINGLE_INPUT_ALGORITHMS)
             return [
                 "GlobalNaiveAggregate",
                 "GlobalNaiveDrift",

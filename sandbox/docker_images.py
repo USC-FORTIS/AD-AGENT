@@ -7,6 +7,7 @@ DOCKER_IMAGE_MAP = {
     "pygod": ("openad-pygod:latest", "sandbox/dockerfiles/Dockerfile.pygod"),
     "darts": ("openad-darts:latest", "sandbox/dockerfiles/Dockerfile.darts"),
     "tslib": ("openad-tslib:latest", "sandbox/dockerfiles/Dockerfile.tslib"),
+    "tsb_ad": ("openad-tsb-ad:latest", "sandbox/dockerfiles/Dockerfile.tsb_ad"),
 }
 
 

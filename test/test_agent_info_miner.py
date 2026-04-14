@@ -26,7 +26,7 @@ class TestAgentInfoMiner(unittest.TestCase):
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(
                     {
-                        "IForest": {
+                        AgentInfoMiner._cache_key("IForest", "pyod"): {
                             "query_datetime": "2099-01-01T00:00:00",
                             "document": "cached_doc",
                         }
@@ -55,8 +55,9 @@ class TestAgentInfoMiner(unittest.TestCase):
             self.assertEqual(doc, "new_doc")
             with open(cache_path, "r", encoding="utf-8") as f:
                 cache = json.load(f)
-            self.assertIn("IForest", cache)
-            self.assertEqual(cache["IForest"]["document"], "new_doc")
+            cache_key = AgentInfoMiner._cache_key("IForest", "pyod")
+            self.assertIn(cache_key, cache)
+            self.assertEqual(cache[cache_key]["document"], "new_doc")
 
     def test_query_docs_cache_expired_requeries(self):
         agent = AgentInfoMiner()
@@ -65,7 +66,7 @@ class TestAgentInfoMiner(unittest.TestCase):
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(
                     {
-                        "IForest": {
+                        AgentInfoMiner._cache_key("IForest", "pyod"): {
                             "query_datetime": "2000-01-01T00:00:00",
                             "document": "old_doc",
                         }
@@ -161,13 +162,14 @@ class TestAgentInfoMiner(unittest.TestCase):
         self.assertIn('"gpu_type": "cpu"', doc)
         self.assertIn('"no_use_gpu": true', doc)
 
-    def test_tsbad_prompt_formats_with_algorithm_name(self):
-        rendered = agent_info_miner_mod.web_search_prompt_tsbad.invoke(
+    def test_tsb_ad_prompt_formats_with_algorithm_name(self):
+        rendered = agent_info_miner_mod.web_search_prompt_tsb_ad.invoke(
             {"algorithm_name": "IForest"}
         ).to_string()
 
         self.assertIn("TSB-AD", rendered)
         self.assertIn("IForest", rendered)
+        self.assertIn("run_IForest", rendered)
 
     def test_reviewer_prompt_formats_with_train_dataset(self):
         rendered = agent_reviewer_mod.test_prompt.invoke(
@@ -177,6 +179,7 @@ class TestAgentInfoMiner(unittest.TestCase):
                 "package_name": "tslib",
                 "train_dataset": "./data/MSL",
                 "feature_dim": 55,
+                "dataset_metadata": "{}",
             }
         ).to_string()
 

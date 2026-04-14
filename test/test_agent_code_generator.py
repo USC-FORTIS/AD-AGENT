@@ -78,6 +78,22 @@ class TestAgentCodeGenerator(unittest.TestCase):
         self.assertIn('Apply user parameters from', rendered)
         self.assertIn("train file", rendered)
 
+    def test_tsb_ad_prompt_mentions_direct_wrapper(self):
+        rendered = agent_code_generator_mod.template_tsb_ad_labeled.invoke(
+            {
+                "algorithm": "IForest",
+                "data_path_train": "./data/demo_train.npy",
+                "data_path_test": "./data/demo_test.npy",
+                "algorithm_doc": "official doc",
+                "parameters": "{}",
+                "dataset_metadata": "{}",
+            }
+        ).to_string()
+
+        self.assertIn("TSB_AD.model_wrapper", rendered)
+        self.assertIn("run_IForest", rendered)
+        self.assertIn("95th percentile", rendered)
+
     def test_sanitize_tslib_args_removes_unsupported_and_normalizes_gpu_flag(self):
         code = (
             'cmd = ["python", "-u", "./Time-Series-Library/run.py", '

@@ -21,9 +21,14 @@ TSLIB_IMAGE = (
     )
 )
 
+TSB_AD_IMAGE = Image.debian_slim(python_version="3.10").pip_install(
+    "TSB-AD", "torch", "numpy", "pandas", "scikit-learn", "scipy"
+)
+
 IMAGE_MAP = {
     "pyod": PYOD_IMAGE,
     "pygod": PYGOD_IMAGE,
     "darts": DARTS_IMAGE,
     "tslib": TSLIB_IMAGE,
+    "tsb_ad": TSB_AD_IMAGE,
 }

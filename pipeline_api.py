@@ -76,7 +76,6 @@ def run_info_miner(state: Dict[str, Any], tool: str) -> str:
     info_miner = state["agent_info_miner"]
     doc = info_miner.query_docs(
         tool,
-        state.get("vectorstore"),
         state["package_name"],
     )
     state["algorithm_doc"] = doc
@@ -135,6 +134,8 @@ def run_reviewer(
         tool,
         state["package_name"],
         feature_dim=feature_dim,
+        train_dataset=state.get("data_path_train"),
+        dataset_metadata=state.get("metadata"),
     )
     if code_quality.error_message:
         code_quality.review_count += 1
@@ -144,7 +145,15 @@ def run_reviewer(
 def run_evaluator(state: Dict[str, Any], code_quality: CodeQuality, tool: str) -> CodeQuality:
     """Run evaluator once on real data and return updated CodeQuality."""
     evaluator = state["agent_evaluator"]
-    final_cq = evaluator.execute_code(code_quality.code, tool, package_name=state["package_name"])
+    final_cq = evaluator.execute_code(
+        code_quality.code,
+        tool,
+        package_name=state["package_name"],
+        data_files=_build_data_files_for_paths(
+            state.get("data_path_train"),
+            state.get("data_path_test"),
+        ),
+    )
     final_cq.review_count = code_quality.review_count
     final_cq.parameters = code_quality.parameters
     return final_cq
@@ -271,3 +280,23 @@ def run_evaluator_optimizer_loop(
 
     state["code_quality"] = best_cq
     return best_cq
+
+
+def _build_data_files_for_paths(*paths: Optional[str]) -> dict[str, str] | None:
+    data_files: dict[str, str] = {}
+    for original_path in paths:
+        if not original_path or not os.path.exists(original_path):
+            continue
+
+        if os.path.isfile(original_path):
+            data_files[original_path] = os.path.abspath(original_path)
+            continue
+
+        for root, _dirs, files in os.walk(original_path):
+            for filename in files:
+                local_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(local_path, original_path)
+                remote_path = os.path.join(original_path, rel_path)
+                data_files[remote_path] = os.path.abspath(local_path)
+
+    return data_files or None

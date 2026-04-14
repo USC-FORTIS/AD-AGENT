@@ -128,17 +128,27 @@ Format:
 ```
 """)
 
-web_search_prompt_tsbad = PromptTemplate.from_template("""
+web_search_prompt_tsb_ad = PromptTemplate.from_template("""
 You are a machine learning expert and will assist me with researching a specific use of a time-series anomaly detection model in TSB-AD.
 
-I want to run `{algorithm_name}`. What are the relevant initialization or runtime parameters and attributes?
-Briefly return related document content.
-Then, extract the runnable parameters for `{algorithm_name}` and return a valid Python dictionary string in a fenced Python code block.
+Official project to refer to:
+https://github.com/TheDatumOrg/TSB-AD
+
+I want to run `{algorithm_name}`. Summarize the relevant official usage for that model in TSB-AD.
+Focus on how `{algorithm_name}` is called through the direct wrapper `TSB_AD.model_wrapper.run_{algorithm_name}`.
+Then extract only the runtime keyword parameters that are relevant to calling that wrapper, and return a valid Python dictionary string in a fenced Python code block.
 """)
+web_search_prompt_tsbad = web_search_prompt_tsb_ad
 
 class AgentInfoMiner:
+    CACHE_KEY_VERSION = "v2"
+
     def __init__(self):
         pass
+
+    @classmethod
+    def _cache_key(cls, algorithm: str, package_name: str) -> str:
+        return f"{cls.CACHE_KEY_VERSION}::{package_name}::{algorithm}"
 
     def query_docs(self, algorithm, package_name,cache_path = "cache.json"):
         """Searches for relevant documentation with caching, expiration, and thread-safe cache writes."""
@@ -162,13 +172,16 @@ class AgentInfoMiner:
                     cache = {}
 
             # Check cache entry
-            if algorithm in cache:
+            cache_key = self._cache_key(algorithm, package_name)
+            legacy_key = algorithm
+            if cache_key in cache or legacy_key in cache:
+                entry = cache.get(cache_key) or cache.get(legacy_key)
                 try:
-                    cached_time = datetime.fromisoformat(cache[algorithm]["query_datetime"])
+                    cached_time = datetime.fromisoformat(entry["query_datetime"])
                     if datetime.now() - cached_time < timedelta(days=7):
                         print(f"[Cache Hit] Using recent cache for {algorithm}")
-                        print(cache[algorithm]["document"])
-                        return cache[algorithm]["document"]
+                        print(entry["document"])
+                        return entry["document"]
                     else:
                         print(f"[Cache Expired] Re-querying {algorithm}")
                 except Exception:
@@ -184,8 +197,8 @@ class AgentInfoMiner:
                     prompt_temp = web_search_prompt_pyod
                 case "pygod":
                     prompt_temp = web_search_prompt_pygod
-                case "tsbad":
-                    prompt_temp = web_search_prompt_tsbad
+                case "tsbad" | "tsb_ad":
+                    prompt_temp = web_search_prompt_tsb_ad
                 case _:
                     prompt_temp = web_search_prompt_darts
 
@@ -197,7 +210,7 @@ class AgentInfoMiner:
                 model="gpt-4o",
                 tools=[{"type": "web_search_preview"}],
                 input=prompt,
-                max_output_tokens=4096
+                max_output_tokens=2024
             )
             algorithm_doc = response.output_text
         
@@ -228,7 +241,7 @@ class AgentInfoMiner:
                 except json.JSONDecodeError:
                     cache = {}
 
-            cache[algorithm] = {
+            cache[self._cache_key(algorithm, package_name)] = {
                 "query_datetime": datetime.now().isoformat(),
                 "document": algorithm_doc
             }

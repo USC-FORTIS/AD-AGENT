@@ -57,5 +57,9 @@ class TestAgentSelector(unittest.TestCase):
         self.assertEqual(AgentSelector._detect_package("data/MSL"), "tslib")
         self.assertEqual(AgentSelector._detect_package("data/PSM/"), "tslib")
 
+    def test_detect_package_prefers_tsb_ad_for_explicit_time_series_algorithm(self):
+        package_name = AgentSelector._detect_package("data/train.csv", ["RobustPCA"])
+        self.assertEqual(package_name, "tsb_ad")
+
 if __name__ == "__main__":
     unittest.main()

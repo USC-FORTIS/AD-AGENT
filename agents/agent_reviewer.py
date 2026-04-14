@@ -39,6 +39,10 @@ Package-specific rules:
 - For PyOD: use `from pyod.utils.data import generate_data`. If `feature_dim={feature_dim}` is provided and greater than 0, set `n_features={feature_dim}` so the synthetic data matches `{train_dataset}`.
 - For PyGOD: build a synthetic graph dataset and make sure `num_features` matches the training data from `{train_dataset}`.
 - For Darts: create synthetic `TimeSeries` data and make sure `n_features` matches the training data from `{train_dataset}`.
+- For TSB-AD: create raw numpy arrays directly, keep any `from TSB_AD.model_wrapper import run_...` import and wrapper call style unchanged, and ensure score lengths still match the synthetic sample count.
+
+Dataset metadata:
+{dataset_metadata}
 """
 )
 
@@ -85,6 +89,7 @@ class AgentReviewer:
         package_name: str,
         feature_dim: int | None = None,
         train_dataset: str | None = None,
+        dataset_metadata: dict | None = None,
     ) -> str:
         """
         Generate a test script using synthetic data and execute it.
@@ -115,6 +120,7 @@ class AgentReviewer:
                             "package_name": package_name,
                             "train_dataset": train_dataset,
                             "feature_dim": feature_dim if feature_dim and feature_dim > 0 else 2,
+                            "dataset_metadata": json.dumps(dataset_metadata or {}, default=str, indent=2),
                         }
                     )
                 ).content
