@@ -1,13 +1,9 @@
 import json
 import os
 import re
-import subprocess
 import sys
-from difflib import SequenceMatcher
 from pathlib import Path
 from types import SimpleNamespace
-
-import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config.config import Config
@@ -29,7 +25,7 @@ Dataset metadata from selector:
 {dataset_metadata}
 ```
 
-Use `feature_count = {feature_count}` for synthetic feature dimensions unless the original script explicitly requires a different dimension.
+Use `feature_dim={feature_dim}` and `feature_count = {feature_count}` for synthetic feature dimensions unless the original script explicitly requires a different dimension.
 
 --- BEGIN CODE ---
 {code}
@@ -42,7 +38,7 @@ TASK:
 3. Output runnable Python code only.
 
 Package-specific rules:
-- For PyOD: use `from pyod.utils.data import generate_data`. If `feature_dim={feature_dim}` is provided and greater than 0, set `n_features={feature_dim}` so the synthetic data matches `{train_dataset}`.
+- For PyOD: use `from pyod.utils.data import generate_data` which returns 4 values: `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=feature_count)`. Always unpack all 4 values. Use `feature_count` for `n_features` so the synthetic data matches `{train_dataset}`.
 - For PyGOD: build a synthetic graph dataset and make sure `num_features` matches the training data from `{train_dataset}`.
 - For Darts: create synthetic `TimeSeries` data and make sure `n_features` matches the training data from `{train_dataset}`.
 - For TSB-AD: create raw numpy arrays directly, keep any `from TSB_AD.model_wrapper import run_...` import and wrapper call style unchanged, and ensure score lengths still match the synthetic sample count.
@@ -194,11 +190,14 @@ class AgentReviewer:
         return path
 
     def _run_script_for_validation(self, path: str, algorithm_name: str, package_name: str) -> str:
-        print(f"[Reviewer] Test script execution started for {algorithm_name}")
+        print()
+        print(f"[reviewer][{algorithm_name}] Synthetic validation script ready: {path}")
+        print(f"[reviewer][{algorithm_name}] Executing validation script in sandbox")
         res = self._execute_test_script(path, algorithm_name, package_name)
-        print("\n=== Test Execution Output ===\n", res.stdout, res.stderr)
-        print(f"[Reviewer] Test script execution finished for {algorithm_name} with return code {res.returncode}")
-
+        print(
+            f"[reviewer][{algorithm_name}] Validation script finished "
+            f"(returncode={res.returncode}, stdout_chars={len(res.stdout)}, stderr_chars={len(res.stderr)})"
+        )
         if res.returncode != 0:
             return self._subprocess_output_as_error(res.stdout, res.stderr)
         nested_error = self._detect_nested_failure(res.stdout, res.stderr)
@@ -241,30 +240,6 @@ class AgentReviewer:
                     nums = [float(x.strip()) for x in m.group(1).split(",")]
                     pts.append({"point": nums, "true_label": float(m.group(2))})
         return pts
-
-
-    @staticmethod
-    def _rewrite_tslib_root_path(code: str, remote_root: Path) -> str:
-        original = AgentReviewer._extract_tslib_root_path(code)
-        if original is None:
-            return code
-        return code.replace(str(original), remote_root.as_posix())
-
-    @staticmethod
-    def _build_tslib_data_files(
-        spec: dict,
-        output_root: Path,
-        remote_root: Path,
-    ) -> dict[str, str]:
-        mapping = {}
-        for key in ("train_output_filename", "test_output_filename", "label_output_filename"):
-            filename = spec.get(key)
-            if not filename:
-                continue
-            local_path = output_root / filename
-            if local_path.exists():
-                mapping[(remote_root / filename).as_posix()] = str(local_path)
-        return mapping
 
     @staticmethod
     def _detect_nested_failure(stdout: str, stderr: str) -> str:

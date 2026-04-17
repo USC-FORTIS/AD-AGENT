@@ -323,7 +323,7 @@ class AgentSelector:
             if dim and num_signals:
                 ts_type = "multivariate" if dim > 1 else "univariate"
                 messages = generate_model_selection_prompt_from_tsb_ad(
-                    name, num_signals, dim, ts_type,
+                    name, num_signals, dim, ts_type, has_test_dataset=bool(self.data_path_test),
                 )
                 content = query_openai(messages, model="o4-mini")
                 algorithm = json.loads(content)["choice"]

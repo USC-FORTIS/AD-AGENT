@@ -128,6 +128,13 @@ class AgentInfoMiner:
     def _cache_key(cls, algorithm: str, package_name: str) -> str:
         return f"{cls.CACHE_KEY_VERSION}::{package_name}::{algorithm}"
 
+    @staticmethod
+    def _doc_summary(document: str) -> str:
+        first_line = next((line.strip() for line in document.splitlines() if line.strip()), "")
+        if len(first_line) > 100:
+            first_line = first_line[:97] + "..."
+        return f"{len(document)} chars" + (f"; first line: {first_line}" if first_line else "")
+
     def query_docs(self, algorithm, package_name,cache_path = "cache.json"):
         """Searches for relevant documentation with caching, expiration, and thread-safe cache writes."""
 
@@ -157,13 +164,15 @@ class AgentInfoMiner:
                 try:
                     cached_time = datetime.fromisoformat(entry["query_datetime"])
                     if datetime.now() - cached_time < timedelta(days=7):
-                        print(f"[Cache Hit] Using recent cache for {algorithm}")
-                        print(entry["document"])
+                        print(
+                            f"[info_miner][{algorithm}] Cache hit "
+                            f"({self._doc_summary(entry['document'])})"
+                        )
                         return entry["document"]
                     else:
-                        print(f"[Cache Expired] Re-querying {package_name}:{algorithm}")
+                        print(f"[info_miner][{algorithm}] Cache expired; re-querying")
                 except Exception:
-                    print(f"[Cache Warning] Datetime parse error for {package_name}:{algorithm}, re-querying.")
+                    print(f"[info_miner][{algorithm}] Cache datetime parse error; re-querying")
 
         # Step 3: Run actual query outside lock (non-blocking for others)
         client = OpenAI()
@@ -203,7 +212,7 @@ class AgentInfoMiner:
             print("Error in response for " + algorithm)
             print(response)
             return ""
-        print(algorithm_doc)
+        print(f"[info_miner][{algorithm}] Documentation fetched ({self._doc_summary(algorithm_doc)})")
 
         # Step 4: Re-lock and write updated cache
         with lock:
@@ -222,13 +231,13 @@ class AgentInfoMiner:
             with open(cache_path, "w", encoding="utf-8") as f:
                 json.dump(cache, f, ensure_ascii=False, indent=2)
 
-        print(f"[Cache Updated] Stored new documentation for {package_name}:{algorithm}")
+        print(f"[info_miner][{algorithm}] Cache updated")
         return algorithm_doc
 
 if __name__ == "__main__":
     agent = AgentInfoMiner()
     # Example usage
     algorithm = "RegressionModel"
-    vectorstore = None  # Replace with actual vectorstore object
     package_name = "darts"
-    doc = agent.query_docs(algorithm, vectorstore, package_name)
+    doc = agent.query_docs(algorithm, package_name)
+    print(doc)

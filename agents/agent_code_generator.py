@@ -3,12 +3,11 @@ from langchain_core.prompts import PromptTemplate
 import ast
 import json
 import os
-import json
 import re
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
-from utils.tsb_ad_registry import get_installed_tsb_ad_algorithms, Unsupervise_AD_Pool
+from utils.tsb_ad_registry import Unsupervise_AD_Pool
 import subprocess
 from datetime import datetime, timedelta
 from config.config import Config
@@ -552,13 +551,14 @@ class AgentCodeGenerator:
         cleaned = self._clean(raw)
         if package_name == "tsb_ad":
             cleaned = self._sanitize_tsb_ad_code(cleaned)
-        print(f"Generated code: {cleaned}\n")
+        line_count = cleaned.count("\n") + 1 if cleaned else 0
+        print(f"[code_generator][{algorithm}] Generated candidate ({line_count} lines)")
         return cleaned
 
     # -------- revision (moved from old Reviewer) --------
     def revise_code(self, code_quality: CodeQuality, algorithm_doc: str) -> str:
-        print("Error detected during execution. Attempting to fix the code...")
-        print("Error message:", code_quality.error_message)
+        print(f"[code_generator][{code_quality.algorithm}] Review failure detected; revising code")
+        print(f"[code_generator][{code_quality.algorithm}] Error: {code_quality.error_message}")
         fixed = llm.invoke(
             template_fix.invoke({
                 "code": code_quality.code,

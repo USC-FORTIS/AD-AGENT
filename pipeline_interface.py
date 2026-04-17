@@ -15,6 +15,22 @@ from entity.code_quality import CodeQuality
 
 from langchain_openai          import ChatOpenAI
 
+
+_LAST_LOG_CONTEXT: tuple[str, str | None] | None = None
+
+
+def log_local(stage: str, message: str, tool: str | None = None) -> None:
+    global _LAST_LOG_CONTEXT
+    context = (stage, tool)
+    if _LAST_LOG_CONTEXT is not None and _LAST_LOG_CONTEXT != context:
+        print()
+    prefix = f"[{stage}]"
+    if tool:
+        prefix += f"[{tool}]"
+    print(f"{prefix} {message}")
+    _LAST_LOG_CONTEXT = context
+
+
 # ------------------------------------------------------------------
 # Full state
 # ------------------------------------------------------------------
@@ -105,11 +121,11 @@ def run_processor(state: FullToolState) -> Dict[str, Any]:
 
 def call_processor(state: FullToolState) -> dict:
     processor = state["agent_processor"]
-    print("\n=== [Processor] Processing user input ===")
+    log_local("processor", "Collecting user input")
     # Interact
     processor.run_chatbot()
     state["experiment_config"] = processor.experiment_config
-    print("\n=== [Processor] User input processing complete ===")
+    log_local("processor", "User input processing complete")
     return state
 
 
@@ -168,10 +184,9 @@ def run_selector(
 
     
 def call_selector(state: FullToolState) -> dict:
-    print("\n=== [Selector] Processing user input ===")
+    log_local("selector", "Resolving package and tool selection")
     if state["experiment_config"] is None:
         raise ValueError("experiment_config not set, run processor first!")
-    print("\n=== [Selector] Selecting package & algorithm ===")
     selector = AgentSelector(state["experiment_config"])
     state.update(
         agent_selector = selector,
@@ -182,7 +197,15 @@ def call_selector(state: FullToolState) -> dict:
         feature_dim     = selector.feature_dim,
         metadata        = getattr(selector, "metadata", None),
     )
-    print("\n=== [Selector] Selection complete ===")
+    log_local(
+        "selector",
+        (
+            f"package={selector.package_name} "
+            f"train={selector.data_path_train} "
+            f"test={selector.data_path_test or 'none'}"
+        ),
+    )
+    log_local("selector", f"tools={', '.join(selector.tools or [])}")
     return state
 
 
@@ -233,13 +256,13 @@ def run_info_miner(
 
 def call_info_miner(state: FullToolState) -> dict:
     _prepare_time_series_repo_if_needed(state["package_name"])
-    print(f"\n=== [Info_miner] Querying documentation for {state['current_tool']} ===")
+    log_local("info_miner", "Querying documentation", state["current_tool"])
     info_miner = state["agent_info_miner"]
     doc = info_miner.query_docs(
         state["current_tool"],
         state["package_name"]
     )
-    print(f"\n=== [Info_miner] Documentation retrieved for {state['current_tool']} ===")
+    log_local("info_miner", "Documentation ready", state["current_tool"])
     return {"algorithm_doc": doc}
 
 
@@ -290,7 +313,7 @@ def run_code_generator(
         return result
 
     state = build_state()
-    print(f"Running code generator for tool: {package_name}")
+    log_local("code_generator", "Preparing code generation", tool)
     if tool is None or data_path_train is None or algorithm_doc is None or package_name is None:
         raise ValueError("Tool, training data path, algorithm documentation, and package name must be provided for code generation.")
     check_dataset_exists(data_path_train, data_path_test)
@@ -313,7 +336,7 @@ def call_code_generator_for_single_tool(state: FullToolState) -> dict:
 
     # generate code || revise code
     if state["code_quality"] is None:
-        print(f"\n=== [code_generator] Generating code for {tool} ===")
+        log_local("code_generator", "Generating initial candidate", tool)
         code = code_generator.generate_code(
             algorithm       = tool,
             data_path_train = state["data_path_train"],
@@ -328,7 +351,7 @@ def call_code_generator_for_single_tool(state: FullToolState) -> dict:
                          error_message="", auroc=-1, auprc=-1,
                          error_points=[], review_count=0)
     else:
-        print( f"\n=== [code_generator] Revising code for {tool} ===")
+        log_local("code_generator", "Revising candidate after review failure", tool)
         cq = state["code_quality"]
         code = code_generator.revise_code(cq, state["algorithm_doc"])
         cq.code = code                                 # cover new code
@@ -384,7 +407,7 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
     cq       = state["code_quality"]
     tool     = state["current_tool"]
 
-    print(f"\n=== [Reviewer] Running validation for {tool} ===")
+    log_local("reviewer", "Running synthetic validation", tool)
     cq.error_message = reviewer.test_code(
         cq.code,
         tool,
@@ -396,7 +419,9 @@ def call_reviewer_for_single_tool(state: FullToolState) -> dict:
 
     if cq.error_message:
         cq.review_count += 1
-    print(f"\n=== [Reviewer] Validation completed for {tool} ===")
+        log_local("reviewer", f"Validation failed: {cq.error_message}", tool)
+    else:
+        log_local("reviewer", "Validation passed", tool)
     return {"code_quality": cq}
 
 
@@ -441,7 +466,15 @@ def run_codegenerator_reviewer_loop(
         cq = run_reviewer(cq, tool)
         if not cq["code_quality"].error_message or cq["code_quality"].review_count >= max_reviews:
             break
-    print(f"Final code quality after {cq['code_quality'].review_count} reviews: AUROC={cq['code_quality'].auroc}, AUPRC={cq['code_quality'].auprc}, Error Points={cq['code_quality'].error_points}")
+    log_local(
+        "reviewer",
+        (
+            f"Finished after {cq['code_quality'].review_count} review cycle(s); "
+            f"AUROC={cq['code_quality'].auroc}, "
+            f"AUPRC={cq['code_quality'].auprc}"
+        ),
+        tool,
+    )
     return cq
 
 
@@ -489,7 +522,7 @@ def call_evaluator_for_single_tool(state: FullToolState) -> dict:
     cq        = state["code_quality"]
     tool      = state["current_tool"]
 
-    print(f"\n=== [Evaluator] Real‑data run for {tool} ===")
+    log_local("evaluator", "Running real-data evaluation in sandbox", tool)
     final_cq = evaluator.execute_code(
         cq.code,
         tool,
@@ -503,6 +536,14 @@ def call_evaluator_for_single_tool(state: FullToolState) -> dict:
     # keep review_count & parameters
     final_cq.review_count = cq.review_count
     final_cq.parameters = cq.parameters
+    if final_cq.error_message:
+        log_local("evaluator", f"Evaluation failed: {final_cq.error_message}", tool)
+    else:
+        log_local(
+            "evaluator",
+            f"Evaluation passed: AUROC={final_cq.auroc:.4f}, AUPRC={final_cq.auprc:.4f}",
+            tool,
+        )
     return {"code_quality": final_cq}
 
 
@@ -555,14 +596,14 @@ def call_optimizer_for_single_tool(state: FullToolState) -> dict:
     if cq.error_message:
         return {"code_quality": cq}
 
-    print(f"\n=== [Optimizer] Parameter tuning for {state['current_tool']} ===")
+    log_local("optimizer", "Starting parameter tuning", state["current_tool"])
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
     tuned_cq = optimizer.run(llm=llm,
                              quality=cq,
                              algorithm_doc=doc,
                              max_steps=8,
                              package_name=state["package_name"])
-    print(f"\n=== [Optimizer] Tuning finished for {state['current_tool']} ===")
+    log_local("optimizer", "Parameter tuning finished", state["current_tool"])
     return {"code_quality": tuned_cq}
 
 

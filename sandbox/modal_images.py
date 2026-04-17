@@ -4,8 +4,15 @@ PYOD_IMAGE = Image.debian_slim(python_version="3.10").pip_install(
     "pyod", "numpy", "scikit-learn", "pandas", "scipy"
 )
 
-PYGOD_IMAGE = Image.debian_slim(python_version="3.10").pip_install(
-    "pygod", "torch", "torch-geometric", "numpy"
+PYGOD_IMAGE = (
+    Image.debian_slim(python_version="3.10")
+    .pip_install("torch", "numpy")
+    .run_commands(
+        "TORCH=$(python -c \"import torch; v=torch.__version__.split('+')[0].split('.'); print(f'{v[0]}.{v[1]}.0')\") && "
+        "pip install --no-cache-dir pyg_lib torch_scatter torch_sparse torch_cluster "
+        "-f https://data.pyg.org/whl/torch-${TORCH}+cpu.html",
+    )
+    .pip_install("torch-geometric", "pygod")
 )
 
 DARTS_IMAGE = Image.debian_slim(python_version="3.10").pip_install(

@@ -12,6 +12,10 @@ if _known.sandbox:
     os.environ["OPENAD_SANDBOX"] = _known.sandbox
 
 from config.config import Config
+try:
+    from sandbox.config import SANDBOX_MODE
+except ModuleNotFoundError:
+    SANDBOX_MODE = os.environ.get("OPENAD_SANDBOX", "modal")
 
 api_key = os.getenv("OPENAI_API_KEY") or Config.OPENAI_API_KEY
 if not api_key:
@@ -42,6 +46,21 @@ from agents.agent_optimizer import AgentOptimizer
 from agents.agent_processor import AgentProcessor
 from agents.agent_reviewer import AgentReviewer
 from entity.code_quality import CodeQuality
+try:
+    from pipeline_interface import log_local
+except ImportError:
+    _LAST_LOG_CONTEXT: tuple[str, str | None] | None = None
+
+    def log_local(stage: str, message: str, tool: str | None = None) -> None:
+        global _LAST_LOG_CONTEXT
+        context = (stage, tool)
+        if _LAST_LOG_CONTEXT is not None and _LAST_LOG_CONTEXT != context:
+            print()
+        prefix = f"[{stage}]"
+        if tool:
+            prefix += f"[{tool}]"
+        print(f"{prefix} {message}")
+        _LAST_LOG_CONTEXT = context
 
 
 def decide_next(state: FullToolState) -> dict:
@@ -101,13 +120,40 @@ def process_all_tools(state: FullToolState) -> dict:
             code_quality=None,
             should_rerun=False,
         )
-        return tool, await asyncio.to_thread(
+        log_local("main", "Starting tool pipeline", tool)
+        result = await asyncio.to_thread(
             compiled_single_tool.invoke,
             tool_state,
             config={"recursion_limit": 20},
         )
+        cq: CodeQuality | None = result.get("code_quality")
+        error_message = getattr(cq, "error_message", "") if cq is not None else ""
+        auroc = getattr(cq, "auroc", None) if cq is not None else None
+        auprc = getattr(cq, "auprc", None) if cq is not None else None
+        if cq and not error_message and auroc is not None and auprc is not None:
+            log_local(
+                "main",
+                f"Finished tool pipeline: AUROC={auroc:.4f}, AUPRC={auprc:.4f}",
+                tool,
+            )
+        elif cq and not error_message:
+            log_local("main", "Finished tool pipeline", tool)
+        else:
+            log_local(
+                "main",
+                f"Finished tool pipeline with error: {error_message if cq else 'Unknown'}",
+                tool,
+            )
+        return tool, result
 
     results = []
+    log_local(
+        "main",
+        (
+            f"Dispatching {len(tools)} tool(s) "
+            f"({'parallel' if '-p' in sys.argv else 'sequential'}): {', '.join(tools)}"
+        ),
+    )
     if "-p" in sys.argv:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -154,10 +200,17 @@ async def main():
         "experiment_config": None,
         "results"         : None,
         "algorithm_doc"   : None,
+        "feature_dim"     : None,
         "metadata"        : None,
     }
 
-    print("\n=== [Main] Starting full pipeline ===")
+    log_local(
+        "main",
+        (
+            f"Starting full pipeline "
+            f"(sandbox={SANDBOX_MODE}, parallel={'-p' in sys.argv}, optimizer={'-o' in sys.argv})"
+        ),
+    )
     try:
         final_state = await asyncio.to_thread(
             compiled_full_graph.invoke,
@@ -165,21 +218,27 @@ async def main():
             config={"recursion_limit": 20},
         )
     except ValueError as exc:
-        print("\n=== [Main] Pipeline stopped ===")
-        print(f"Error: {exc}")
+        log_local("main", f"Pipeline stopped: {exc}")
         return 1
 
-    print("\n=== [Main] Pipeline finished ===")
+    log_local("main", "Pipeline finished")
 
     for tool, tstate in final_state.get("results", []):
         cq: CodeQuality | None = tstate.get("code_quality")
-        if cq and not cq.error_message:
-            print(
-                f"[{tool}] AUROC: {cq.auroc:.4f}  "
-                f"AUPRC: {cq.auprc:.4f}  Parameters: {cq.parameters}"
+        error_message = getattr(cq, "error_message", "") if cq is not None else ""
+        auroc = getattr(cq, "auroc", None) if cq is not None else None
+        auprc = getattr(cq, "auprc", None) if cq is not None else None
+        parameters = getattr(cq, "parameters", None) if cq is not None else None
+        if cq and not error_message and auroc is not None and auprc is not None:
+            log_local(
+                "result",
+                f"AUROC={auroc:.4f} AUPRC={auprc:.4f} parameters={parameters}",
+                tool,
             )
+        elif cq and not error_message:
+            log_local("result", "completed", tool)
         else:
-            print(f"[{tool}] Error: {cq.error_message if cq else 'Unknown'}")
+            log_local("result", f"error={error_message if cq else 'Unknown'}", tool)
 
     return 0
 

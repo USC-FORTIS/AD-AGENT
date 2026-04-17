@@ -21,6 +21,7 @@ class AgentEvaluator:
         data_files: dict[str, str] | None = None,
     ) -> CodeQuality:
         script_path = self._write_real_script(code, algorithm_name)
+        print()
         print(f"[Evaluator] Saved real-data script to {script_path}")
         stdout, stderr, returncode = sandbox_execute_code(
             code=code,
@@ -29,10 +30,13 @@ class AgentEvaluator:
             data_files=data_files,
             timeout=180,
         )
-        print("\n=== Real-Data Execution Output ===\n", stdout, stderr)
+        print(
+            f"[evaluator][{algorithm_name}] Sandbox execution finished "
+            f"(returncode={returncode}, stdout_chars={len(stdout)}, stderr_chars={len(stderr)})"
+        )
 
         if returncode != 0:
-            return CodeQuality(
+            return self._build_code_quality(
                 code=code,
                 algorithm=algorithm_name,
                 parameters={},
@@ -46,7 +50,7 @@ class AgentEvaluator:
 
         nested_error = self._detect_nested_failure(stdout, stderr)
         if nested_error:
-            return CodeQuality(
+            return self._build_code_quality(
                 code=code,
                 algorithm=algorithm_name,
                 parameters={},
@@ -62,7 +66,7 @@ class AgentEvaluator:
         auprc = self._find_float(r"AUPRC:\s*([\d.]+)", stdout)
         errors = self._parse_errors(stdout)
 
-        return CodeQuality(
+        return self._build_code_quality(
             code=code,
             algorithm=algorithm_name,
             parameters={},
@@ -73,6 +77,16 @@ class AgentEvaluator:
             error_points=errors,
             review_count=0,
         )
+
+    @staticmethod
+    def _build_code_quality(**kwargs) -> CodeQuality:
+        try:
+            return CodeQuality(**kwargs)
+        except TypeError:
+            obj = CodeQuality()
+            for key, value in kwargs.items():
+                setattr(obj, key, value)
+            return obj
 
     @staticmethod
     def _write_real_script(code: str, algorithm_name: str) -> str:
