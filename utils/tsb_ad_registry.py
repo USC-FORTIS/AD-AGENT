@@ -1,3 +1,16 @@
+Unsupervise_AD_Pool = [
+    'FFT', 'SR', 'NORMA', 'Series2Graph', 'Sub_IForest', 'IForest', 'LOF', 'Sub_LOF',
+    'POLY', 'MatrixProfile', 'Sub_PCA', 'PCA', 'HBOS', 'Sub_HBOS', 'KNN', 'Sub_KNN',
+    'KMeansAD', 'KMeansAD_U', 'KShapeAD', 'COPOD', 'CBLOF', 'COF', 'EIF', 'RobustPCA',
+    'Lag_Llama', 'TimesFM', 'Chronos', 'MOMENT_ZS',
+]
+
+Semisupervise_AD_Pool = [
+    'Left_STAMPi', 'SAND', 'MCD', 'Sub_MCD', 'OCSVM', 'Sub_OCSVM', 'AutoEncoder',
+    'CNN', 'LSTMAD', 'TranAD', 'USAD', 'OmniAnomaly', 'AnomalyTransformer',
+    'TimesNet', 'FITS', 'Donut', 'OFA', 'MOMENT_FT',
+]
+
 TSB_AD_ALGORITHM_DESCRIPTIONS = {
     "IForest": "Isolation Forest based anomaly detector supported by TSB-AD.",
     "LOF": "Local Outlier Factor based detector supported by TSB-AD.",
@@ -70,7 +83,8 @@ TSB_AD_SINGLE_INPUT_ALGORITHMS = [
 
 TSB_AD_MODEL_SELECTION_CANDIDATES = TSB_AD_SINGLE_INPUT_ALGORITHMS
 
-
+# Semisupervised algorithms require separate train/test datasets
+TSB_AD_SEMISUPERVISE_ALGORITHMS = Semisupervise_AD_Pool
 def normalize_algorithm_name(name: str) -> str:
     return "".join(ch.lower() for ch in str(name) if ch.isalnum())
 
@@ -109,3 +123,9 @@ def is_tsb_ad_algorithm(name: str) -> bool:
         normalize_algorithm_name(candidate) == normalized
         for candidate in get_effective_tsb_ad_algorithms()
     )
+
+
+def is_installed_tsb_ad_algorithm(name: str) -> bool:
+    normalized = normalize_algorithm_name(name)
+    installed = get_installed_tsb_ad_algorithms()
+    return any(normalize_algorithm_name(candidate) == normalized for candidate in installed)

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import sys
 
 
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 
@@ -50,6 +50,7 @@ Follow the **ReAct** loop **STRICTLY** – each response must be *Either*:
 
 IMPORTANT:
 1. Do not input `default` in the parameters, use the default values from the code.
+2. Keep scripts self-contained for sandbox execution. Do not introduce generated loader-file dependencies.
 """
 )
 
@@ -131,8 +132,8 @@ class AgentOptimizer:
         llm: ChatOpenAI,
         quality: CodeQuality,
         algorithm_doc: str,
-        max_steps: int = 8,
-        package_name: str = "pyod",
+        package_name: str = "",
+        max_steps: int = 8
     ) -> CodeQuality:
         """Run the optimization loop using the given inputs and return CodeQuality."""
         code = quality.code
@@ -175,6 +176,10 @@ class AgentOptimizer:
 
         auroc = self._find_float(r"AUROC:\s*([0-9.]+)", final_output, default=quality.auroc)
         auprc = self._find_float(r"AUPRC:\s*([0-9.]+)", final_output, default=quality.auprc)
+        accuracy = quality.accuracy
+        f1 = quality.f1
+        specificity = quality.specificity
+        sensitivity = quality.sensitivity
         error_points = self._parse_errors(final_output)
 
         return CodeQuality(
@@ -186,7 +191,11 @@ class AgentOptimizer:
             auroc=auroc,
             auprc=auprc,
             error_points=error_points,
-            review_count=quality.review_count
+            review_count=quality.review_count,
+            accuracy=accuracy,
+            f1=f1,
+            specificity=specificity,
+            sensitivity=sensitivity,
         )
 
 
@@ -199,16 +208,20 @@ class AgentOptimizer:
 if __name__ == "__main__":
     demo = {
             "code": """
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import scipy.io
-import numpy as np
 from pyod.models.abod import ABOD
 from sklearn.metrics import roc_auc_score, average_precision_score
 
-# Load data directly using scipy
+# Load data directly so the script is sandbox-friendly
 train_data = scipy.io.loadmat('./data/glass_train.mat')
-X_train, y_train = train_data['X'], train_data['y'].ravel()
 test_data = scipy.io.loadmat('./data/glass_test.mat')
-X_test, y_test = test_data['X'], test_data['y'].ravel()
+X_train = train_data['X']
+y_train = train_data['y'].ravel()
+X_test = test_data['X']
+y_test = test_data['y'].ravel()
 
 # Initialize ABOD
 model = ABOD()

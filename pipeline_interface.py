@@ -12,7 +12,6 @@ from agents.agent_reviewer import AgentReviewer
 from agents.agent_evaluator import AgentEvaluator
 from agents.agent_optimizer import AgentOptimizer
 from entity.code_quality import CodeQuality
-from utils.tslib_setup import prepare_tslib_repo
 
 from langchain_openai          import ChatOpenAI
 
@@ -44,6 +43,7 @@ class FullToolState(TypedDict):
 
 # Ensure API key is available
 os.environ.setdefault("OPENAI_API_KEY", Config.OPENAI_API_KEY)
+
 
 # Public API helpers for running the pipeline step-by-step.
 def build_state() -> Dict[str, Any]:
@@ -190,6 +190,10 @@ def call_selector(state: FullToolState) -> dict:
 # ------------------------------------------------------------------
 # Node: info_miner
 # ------------------------------------------------------------------
+def _prepare_time_series_repo_if_needed(package_name: Optional[str]) -> None:
+    return None
+
+
 def run_info_miner(
     algorithm: Optional[str] = None,
     package_name: Optional[str] = None,
@@ -223,10 +227,12 @@ def run_info_miner(
     state = build_state()
     state["current_tool"] = algorithm
     state["package_name"] = package_name
+    _prepare_time_series_repo_if_needed(package_name)
     result = call_info_miner(state)
     return result
 
 def call_info_miner(state: FullToolState) -> dict:
+    _prepare_time_series_repo_if_needed(state["package_name"])
     print(f"\n=== [Info_miner] Querying documentation for {state['current_tool']} ===")
     info_miner = state["agent_info_miner"]
     doc = info_miner.query_docs(
@@ -248,6 +254,7 @@ def run_code_generator(
     data_path_test: Optional[str] = None,
     input_parameters: Optional[dict] = None,
     code_quality: Optional[CodeQuality] = None,
+    metadata: Optional[dict] = None,
     state: FullToolState = None
 ) -> Dict[str, Any]:
     """
@@ -294,6 +301,7 @@ def run_code_generator(
     state["input_parameters"] = input_parameters
     state["package_name"] = package_name
     state["code_quality"] = code_quality
+    state["metadata"] = metadata
 
     result = call_code_generator_for_single_tool(state)
     return result
@@ -301,8 +309,7 @@ def run_code_generator(
 def call_code_generator_for_single_tool(state: FullToolState) -> dict:
     code_generator = state["agent_code_generator"]
     tool  = state["current_tool"]
-    if state["package_name"] == "tslib":
-        prepare_tslib_repo(project_root=os.path.dirname(os.path.abspath(__file__)))
+    _prepare_time_series_repo_if_needed(state["package_name"])
 
     # generate code || revise code
     if state["code_quality"] is None:

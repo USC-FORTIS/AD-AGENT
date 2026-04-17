@@ -20,6 +20,8 @@ class AgentEvaluator:
         package_name: str = "pyod",
         data_files: dict[str, str] | None = None,
     ) -> CodeQuality:
+        script_path = self._write_real_script(code, algorithm_name)
+        print(f"[Evaluator] Saved real-data script to {script_path}")
         stdout, stderr, returncode = sandbox_execute_code(
             code=code,
             algorithm_name=algorithm_name,
@@ -71,6 +73,15 @@ class AgentEvaluator:
             error_points=errors,
             review_count=0,
         )
+
+    @staticmethod
+    def _write_real_script(code: str, algorithm_name: str) -> str:
+        folder = "generated_scripts"
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"{algorithm_name}.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(code)
+        return path
 
     @staticmethod
     def _find_float(pattern: str, text: str, default: float = -1.0) -> float:

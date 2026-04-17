@@ -3,10 +3,12 @@ from langchain_core.prompts import PromptTemplate
 import ast
 import json
 import os
+import json
 import re
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from entity.code_quality import CodeQuality
+from utils.tsb_ad_registry import get_installed_tsb_ad_algorithms, Unsupervise_AD_Pool
 import subprocess
 from datetime import datetime, timedelta
 from config.config import Config
@@ -27,14 +29,17 @@ You are an expert Python developer with deep experience in anomaly detection lib
 --- END DOCUMENTATION ---
 
 4. The code should:
-   (1) Import all necessary libraries (sys, os, numpy, scipy, pandas, sklearn, pyod, etc.)
-   (2) Load training data from `{data_path_train}` and testing data from `{data_path_test}` using the appropriate Python library based on the file format:
-       - `.mat` files: use `scipy.io.loadmat`, extract the feature matrix as `X_train`/`X_test` and labels as `y_train`/`y_test`
-       - `.csv` files: use `pandas.read_csv`, identify feature and label columns
-       Ensure `X_train`, `y_train`, `X_test`, `y_test` are properly defined as numpy arrays.
-   (3) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
-   (4) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values to the function.
-   (5) Use `.decision_scores_` on `X_train` for training outlier scores
+   (1) import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head
+   (2) Load data directly from `{data_path_train}` and `{data_path_test}`.
+   (3) Use the dataset metadata below to choose the correct loading logic:
+       {dataset_metadata}
+   (4) Create variables `X_train`, `y_train`, `X_test`, and `y_test` directly from the files. Use standard libraries such as `pandas`, `numpy`, `scipy.io`, or `json` as appropriate for the file type and metadata.
+       For CSV files, infer label columns from metadata/head preview and common names like `label`, `Label`, `target`, or `anomaly`; otherwise treat the last clearly target-like column as label.
+       For `.mat` files, load with `scipy.io.loadmat` and use metadata/head preview to select feature and label arrays.
+       Ensure `X_train` and `X_test` are 2D numeric arrays and `y_train`/`y_test` are 1D numeric arrays.
+   (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
+   (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
+   (7) Use `.decision_scores_` on `X_train` for training outlier scores
        Use `.decision_function(X_test)` for test outlier scores
        Calculate AUROC (Area Under the Receiver Operating Characteristic Curve) and AUPRC (Area Under the Precision-Recall Curve) based on given data
    (6) Using variables to record the AUROC & AUPRC and print them out in following format:
@@ -43,11 +48,9 @@ You are an expert Python developer with deep experience in anomaly detection lib
    (7) Using variables to record prediction failed data and print these points out with true label in following format:
        `Failed prediction at point [xx,xx,xx...] with true label xx` Use `.tolist()` to convert point to be an array.
 
-Dataset metadata (use this to understand the data structure):
-{dataset_metadata}
-
-IMPORTANT:
-- Load data directly from `{data_path_train}` & `{data_path_test}` using standard Python libraries (scipy, pandas, numpy). Do NOT use any custom DataLoader class.
+IMPORTANT: 
+- Strictly follow steps (2)-(8) to load the data directly from `{data_path_train}` & {data_path_test}.
+- Do not use `DataLoader` in the generated script; the selector has already collected dataset metadata for you.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -63,13 +66,16 @@ You are an expert Python developer with deep experience in anomaly detection lib
 --- END DOCUMENTATION ---
 
 4. The code should:
-   (1) Import all necessary libraries (sys, os, numpy, scipy, pandas, sklearn, pyod, etc.)
-   (2) Load the data from `{data_path_train}` using the appropriate Python library based on the file format:
-       - `.mat` files: use `scipy.io.loadmat`, extract the feature matrix as `X_train`
-       - `.csv` files: use `pandas.read_csv`, extract numeric columns as `X_train`
-   (3) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
-   (4) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values to the function.
-   (5) Use `.decision_scores_` on `X_train` for training outlier scores
+   (1) Import sys, os and include command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` in the head.
+   (2) Load data directly from `{data_path_train}`. Do not import or use `DataLoader`, and do not generate or read `train_data_loader.py`.
+   (3) Use the dataset metadata below to choose the correct loading logic:
+       {dataset_metadata}
+   (4) Extract the feature matrix from the loaded data as `X_train`. Use standard libraries such as `pandas`, `numpy`, `scipy.io`, or `json` as appropriate for the file type and metadata.
+       For CSV files, drop obvious label/target columns and non-numeric identifier columns from `X_train`.
+       For `.mat` files, load with `scipy.io.loadmat` and use metadata/head preview to select the feature array.
+   (5) Initialize the specified algorithm `{algorithm}` using variable `model`, strictly following the provided documentation and train the model with `X_train`
+   (6) Determine whether the following parameters `{parameters}` apply to this initialization function and, if so, add their values ​to the function.
+   (7) Use `.decision_scores_` on `X_train` for training outlier scores
        Use `.decision_function(X_train)` for test outlier scores
    (6) Print AUROC & AUPRC Using default value `-1`:
        `AUROC: -1`
@@ -77,11 +83,9 @@ You are an expert Python developer with deep experience in anomaly detection lib
    (7) Using variables to record outlier data and print these points out in following format:
        `Detected outlier at point [xx,xx,xx...]` Use `.tolist()` to convert point to be an array.
 
-Dataset metadata (use this to understand the data structure):
-{dataset_metadata}
-
-IMPORTANT:
-- Load data directly from `{data_path_train}` using standard Python libraries (scipy, pandas, numpy). Do NOT use any custom DataLoader class.
+IMPORTANT: 
+- Strictly follow steps (2)-(8) to load the data directly from `{data_path_train}`.
+- Do not use `DataLoader` in the generated script; the selector has already collected dataset metadata for you.
 - Do NOT input optional or incorrect parameters.
 """)
 
@@ -99,7 +103,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
 
 4. The code should:
    (1) Import sys, os, torch, and include the command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))`&`from pygod.detector import {algorithm}`
-   (2) Load training and test data using `torch.load` with parameter `weights_only=False` from the file paths `{data_path_train}` and `{data_path_test}` respectively.
+   (2) Load training and test data from the file paths `{data_path_train}` and `{data_path_test}` respectively.
    (3) Convert labels in the loaded data by executing:
        `train_data.y = (train_data.y != 0).long()`
        `test_data.y = (test_data.y != 0).long()`
@@ -171,30 +175,62 @@ You are an expert Python developer with deep experience in time-series anomaly d
    (2) Include `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` near the top.
    (3) Import the direct wrapper for the target algorithm using:
        `from TSB_AD.model_wrapper import run_{algorithm}`
+       and call that wrapper directly.
+       The imported wrapper name, the assigned `model_runner`, and the called function must be exactly the same symbol: `run_{algorithm}`.
+       Do not reference `run_{algorithm}` unless it is explicitly imported earlier in the script.
    (4) Load training data from `{data_path_train}` and test data from `{data_path_test}`.
-       - Support CSV files with numeric value columns and an optional label column such as `Label`, `label`, `anomaly`, or `target`.
-       - Support `.npy` and `.npz` files by converting them into numeric numpy arrays.
-       - Drop timestamp-like columns from CSV feature matrices.
        - Use this dataset metadata to choose the most accurate loading logic:
          {dataset_metadata}
-   (5) Clean feature matrices before scoring:
-       `X_train = np.nan_to_num(np.asarray(X_train, dtype=float))`
-       `X_test = np.nan_to_num(np.asarray(X_test, dtype=float))`
+   (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
    (6) Store the callable in variable `model_runner = run_{algorithm}`.
-   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by `inspect.signature(model_runner).parameters`.
-   (8) Run `train_scores = model_runner(X_train, **run_kwargs)` and `test_scores = model_runner(X_test, **run_kwargs)`.
-   (9) Convert outputs to sample-level float scores. If the wrapper returns a 2D array with one row per sample, reduce it with `np.linalg.norm(scores, axis=1)`. If the final score length does not match the sample count, raise a `ValueError`.
-   (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score`.
+   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
+       You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
+       For semisupervised TSB-AD wrappers, `run_kwargs` should contain only filtered user parameters; do not invent any extra default kwargs.
+       If a parameter is not in the direct wrapper signature, do not pass it.
+       After filtering `run_kwargs`, do not append unsupported defaults with `run_kwargs.update(...)`.
+       If you need to add a fallback default, re-filter the final kwargs against `inspect.signature(model_runner).parameters` before the call.
+       Never set `periodicity` to `0`.
+       If you explicitly set `periodicity`, it must be an integer `>= 1`.
+   (8) The semisupervised wrapper takes both datasets in a single call:
+       `scores = model_runner(X_train, X_test, **run_kwargs)`
+       This returns a 1D anomaly score array for X_test only (length == len(X_test)).
+       Do NOT call the wrapper twice (once for train, once for test).
+       Before the wrapper call, convert both arrays to finite `np.float64` values:
+       `X_train = np.nan_to_num(np.asarray(X_train, dtype=np.float64))`
+       `X_test = np.nan_to_num(np.asarray(X_test, dtype=np.float64))`
+       If the direct wrapper signature uses two positional dataset arguments such as `(data_train, data)`, pass both datasets positionally and do not place `data` or `data_train` inside `run_kwargs`.
+       Some wrappers (e.g. SAND) only support univariate data internally. Only reduce multivariate inputs to 1D when the documentation or a concrete runtime error proves the wrapper is univariate-only.
+       If you reduce to 1D for a univariate-only wrapper, do it like this:
+       `X_train_in = X_train[:, 0] if X_train.ndim == 2 else X_train`
+       `X_test_in = X_test[:, 0] if X_test.ndim == 2 else X_test`
+       and call `scores = model_runner(X_train_in, X_test_in, **run_kwargs)`.
+       Otherwise keep `X_train` and `X_test` as 2D arrays and call `scores = model_runner(X_train, X_test, **run_kwargs)`.
+   (9) Convert the wrapper output to a sample-level 1D numpy float score array and validate its length.
+       Do not blindly flatten 2D outputs. Use a helper such as:
+       `def to_sample_scores(raw_scores, n_samples):`
+       `    arr = np.asarray(raw_scores, dtype=float)`
+       `    if arr.ndim == 2 and arr.shape[0] == n_samples:`
+       `        return np.linalg.norm(arr, axis=1)`
+       `    arr = arr.reshape(-1)`
+       `    if len(arr) != n_samples:`
+       `        raise ValueError(f"Score length {{len(arr)}} does not match sample count {{n_samples}}")`
+       `    return arr`
+       Apply it as `scores = to_sample_scores(scores, len(X_test))`.
+   (10) Calculate AUROC and AUPRC using `roc_auc_score` and `average_precision_score` with `scores` vs `y_test`.
    (11) Print metrics exactly in this format:
        AUROC: 0.1234
        AUPRC: 0.5678
-   (12) Threshold test scores using the 95th percentile of training scores and print mismatches exactly as:
+   (12) Threshold scores using the 95th percentile and print mismatches exactly as:
        `Failed prediction at point [xx, xx, ...] with true label z`
 
 IMPORTANT:
 - Produce only executable Python code.
 - Do not use subprocess.
-- Do not invent unsupported TSB-AD APIs or parameters.
+- Do not use `run_Semisupervise_AD`; call the direct wrapper for `{algorithm}` instead.
+- Do not invent unsupported arguments or unsupported TSB-AD APIs.
+- Keep the script robust to both CSV and `.npy`-style time-series inputs.
+- Always use the exact provided dataset paths `{data_path_train}` and `{data_path_test}` or exact companion files derived from those same paths.
+- Do not substitute official demo paths such as `./dataset/MSL/...`.
 """)
 
 template_tsb_ad_unlabeled = PromptTemplate.from_template("""
@@ -213,28 +249,48 @@ You are an expert Python developer with deep experience in time-series anomaly d
    (2) Include `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))` near the top.
    (3) Import the direct wrapper for the target algorithm using:
        `from TSB_AD.model_wrapper import run_{algorithm}`
+       and call that wrapper directly.
+       The imported wrapper name, the assigned `model_runner`, and the called function must be exactly the same symbol: `run_{algorithm}`.
+       Do not reference `run_{algorithm}` unless it is explicitly imported earlier in the script.
    (4) Load data from `{data_path_train}`.
-       - Support CSV, `.npy`, and `.npz` inputs.
-       - Drop timestamp-like columns and obvious label columns from CSV feature matrices.
+       - Support CSV files with value columns and optional label columns.
+       - Support `.npy` datasets and legacy dataset roots by resolving companion `_train.npy` files.
+       - Drop timestamp-like columns from CSV feature matrices.
+       - Convert `X_train` to a numeric numpy array and clean missing values before calling the wrapper:
+         `X_train = np.nan_to_num(np.asarray(X_train, dtype=float))`
        - Use this dataset metadata to choose the most accurate loading logic:
          {dataset_metadata}
-   (5) Clean the feature matrix before scoring:
-       `X_train = np.nan_to_num(np.asarray(X_train, dtype=float))`
+   (5) Store the algorithm name in variable `ALGORITHM_NAME = "{algorithm}"`.
    (6) Store the callable in variable `model_runner = run_{algorithm}`.
-   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by `inspect.signature(model_runner).parameters`.
+   (7) Apply user parameters from `{parameters}` only if they are valid keyword arguments supported by the direct wrapper signature.
+       You must inspect `inspect.signature(model_runner).parameters` and filter `run_kwargs` against that exact signature before the call.
+       If a parameter is not in the direct wrapper signature, do not pass it.
+       After filtering `run_kwargs`, do not append unsupported defaults with `run_kwargs.update(...)`.
+       If you need to add a fallback default, re-filter the final kwargs against `inspect.signature(model_runner).parameters` before the call.
+       Never set `periodicity` to `0`.
+       If you explicitly set `periodicity`, it must be an integer `>= 1`.
    (8) Run `scores = model_runner(X_train, **run_kwargs)`.
-   (9) Convert outputs to a sample-level float score array. If a 2D score matrix has one row per sample, reduce it with `np.linalg.norm(scores, axis=1)`. If the final score length does not match `len(X_train)`, raise a `ValueError`.
+       Before the wrapper call, convert `X_train` to finite `np.float64` values:
+       `X_train = np.nan_to_num(np.asarray(X_train, dtype=np.float64))`
+   (9) Convert outputs to a sample-level 1D numpy float score array and validate its length.
+       If the wrapper returns a tuple/list, choose the element that is a numeric score vector whose length matches `len(X_train)`.
+       Do not blindly flatten 2D outputs. If `scores` is a 2D array with `scores.shape[0] == len(X_train)`, convert it with `np.linalg.norm(scores, axis=1)`.
+       If the final score length does not equal `len(X_train)`, raise a `ValueError` instead of continuing.
    (10) Print metrics exactly:
        AUROC: -1
        AUPRC: -1
    (11) Detect outliers with a robust threshold such as the 95th percentile of `scores`.
-       Print detected sample indices in one line exactly as:
+       Print the detected outlier indices as one list exactly as:
        `Detected outlier at point [0, 5, 12]`
+       Use `outliers.tolist()` for this unlabeled TSB-AD output format.
 
 IMPORTANT:
 - Produce only executable Python code.
 - Do not use subprocess.
-- Do not invent unsupported TSB-AD APIs or parameters.
+- Do not use `run_Unsupervise_AD`; call the direct wrapper for `{algorithm}` instead.
+- Do not invent unsupported arguments or unsupported TSB-AD APIs.
+- Always use the exact provided dataset path `{data_path_train}` or exact companion files derived from it.
+- Do not substitute official demo paths such as `./dataset/MSL/...`.
 """)
 
 template_fix = PromptTemplate.from_template("""
@@ -262,115 +318,52 @@ Strict rules:
 1. Preserve the overall script structure whenever possible.
 2. Do not rewrite the script from scratch unless the original code is fundamentally broken.
 3. Do not change `cwd` unless the error explicitly proves that the current working directory is wrong.
-4. If the script already uses `subprocess.run(cmd, check=True, cwd="./Time-Series-Library")`, keep it unchanged.
-5. Do not replace `run.py` with shell script paths such as `.sh`.
-6. Do not change paths to `scripts/...` unless the original code already used them.
-7. Do not invent unrelated path changes.
-8. If the error is about CUDA, GPU availability, or Torch GPU support, fix GPU-related command arguments instead of changing paths.
-9. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
-10. Keep all valid existing arguments unless the error indicates one of them is the cause.
-11. Do not introduce markdown fences, explanations, or comments.
-12. If the script uses a TSB-AD direct wrapper such as `run_IForest`, preserve that direct-wrapper import and call style.
-13. If the error is `unexpected keyword argument`, remove unsupported wrapper arguments instead of inventing replacement names.
-14. For TSB-AD scripts, normalize wrapper outputs to one score per sample before thresholding.
+4. Do not invent unrelated path changes.
+5. If the error is about CUDA, GPU availability, or Torch GPU support, fix only the GPU-related argument or device setting.
+6. If the error is about a missing file or directory, only change the specific path that is proven to be wrong.
+7. Keep all valid existing arguments unless the error indicates one of them is the cause.
+8. Do not introduce markdown fences, explanations, or comments.
+9. If the script uses a TSB-AD direct wrapper such as `run_IForest` or `run_RobustPCA`, preserve that direct wrapper import and call style.
+10. If the error is `unexpected keyword argument`, remove or filter unsupported keyword arguments using the direct wrapper signature instead of inventing replacement parameter names.
+    If the script already filtered `run_kwargs` with `inspect.signature(model_runner).parameters`, do not add extra kwargs afterward with `run_kwargs.update(...)` unless you re-filter the final kwargs against the same signature.
+    Do not introduce guessed defaults such as `window_size`, `threshold`, `normalize`, or `verbose` unless the wrapper signature explicitly supports them.
+11. Keep the script self-contained for sandbox execution. Do not import or use `DataLoader`, and do not depend on generated loader files such as `train_data_loader.py` or `test_data_loader.py`; load dataset files directly instead.
+12. For unlabeled TSB-AD anomaly outputs, print detected outlier indices as one list using the format `Detected outlier at point [0, 5, 12]`.
+13. For TSB-AD scripts, clean missing feature values with `np.nan_to_num(np.asarray(X, dtype=float))` before calling the model wrapper.
+    When the error mentions a dtype mismatch or a dependency such as `stumpy` expects `numpy.float64`, cast the wrapper inputs explicitly with `np.asarray(X, dtype=np.float64)` instead of `float32`.
+14. For TSB-AD scripts, normalize wrapper outputs to sample-level scores before thresholding: do not blindly flatten 2D arrays; if a 2D score matrix has one row per sample, use `np.linalg.norm(scores, axis=1)`, then require `len(scores) == len(X_train)` or the matching test set length.
+15. If the error is `ValueError: range() arg 3 must not be zero` in a TSB-AD wrapper (e.g. run_SAND), it means the algorithm only supports univariate (1D) data but received multivariate (2D) data. The internal `find_length_rank` returns 0 on 2D arrays, making `overlaping_rate=0`. Fix by extracting the first channel before calling the wrapper:
+    `X_train_1d = X_train[:, 0] if X_train.ndim == 2 else X_train`
+    `X_test_1d = X_test[:, 0] if X_test.ndim == 2 else X_test`
+    Then call `scores = model_runner(X_train_1d, X_test_1d, **run_kwargs)`.
+    Keep `X_train` and `X_test` 2D for all other purposes (e.g. `len()`, `shape`). Do NOT remove the `data_test` argument.
+16. If the error is `ValueError: Cannot take a larger sample than population when 'replace=False'` in a TSB-AD wrapper that infers window sizes (for example `run_SAND`), keep the same data paths and keep the wrapper call structure, but do not set `periodicity` to `0`.
+    If the script added a manual `run_kwargs["periodicity"]` override, remove that override and fall back to the wrapper default, or replace it with a valid integer `>= 1` such as `1`.
+    Also inspect how `X_train` and `X_test` are loaded. If a semisupervised TSB-AD script loads the same dataset path for both `X_train` and `X_test`, that is likely the real bug.
+    In that case, keep the same loading style but change `X_test` to the matching test dataset path.
+    If the script uses a paired naming pattern such as `_train.npy` / `_test.npy`, replace only the mistaken test path with the `_test.npy` companion file.
+    Do not replace the dataset with demo files, and do not invent unrelated path changes.
+17. If the error is `ValueError: ('All window sizes must be greater than or equal to three', ...)` in a TSB-AD wrapper such as `run_SAND`, it means the script forced an invalid tiny window, often by setting `periodicity=0`.
+    Remove the manual `periodicity=0` override.
+    If you still need an explicit value, use a valid integer `>= 1`.
+    Keep the same dataset paths and same wrapper call shape.
+18. If the error is `got multiple values for argument 'data'` in a TSB-AD direct wrapper, the second dataset argument named `data` is being passed both positionally and through kwargs or otherwise duplicated.
+    Remove any `data` or `data_train` entry from `run_kwargs`.
+    Keep the wrapper call positional, for example `scores = model_runner(X_train, X_test, **run_kwargs)`.
+    Do not rewrite the call to use keyword arguments for the dataset arrays unless the wrapper signature explicitly requires that.
+19. If the error is `ValueError: not enough values to unpack (expected 2, got 1)` from a TSB-AD model doing `n_samples, n_features = X.shape`, the wrapper received a 1D array but expects a 2D feature matrix.
+    Do not reduce `X_train` or `X_test` to one channel in that case.
+    Keep the dataset arrays 2D and pass them directly to the wrapper.
+20. If the error is `missing 1 required positional argument: 'data'` in a TSB-AD direct wrapper, the wrapper expects both train and test datasets as positional arguments.
+    Pass both arrays positionally, for example `scores = model_runner(X_train, X_test, **run_kwargs)`.
+    Do not drop the second dataset argument, and do not try to satisfy it by adding a `data` key to `run_kwargs`.
+21. If the error says a library expects `numpy.float64` but found `float32` in a TSB-AD script, cast the dataset arrays passed to the wrapper to `np.float64` immediately before the call:
+    `X_train = np.nan_to_num(np.asarray(X_train, dtype=np.float64))`
+    `X_test = np.nan_to_num(np.asarray(X_test, dtype=np.float64))`
+    Keep the same wrapper call shape and do not downcast back to `float32`.
 
 Return only executable Python code.
 """)
-
-
-template_tslib_labeled = PromptTemplate.from_template("""
-You are an expert Python developer using **Time-Series-Library** for anomaly detection.
-
-Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
-
---- BEGIN DOCUMENTATION ---
-{algorithm_doc}
---- END DOCUMENTATION ---
-
-The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
-
-Your job:
-1. Start from the official CLI arguments in the documentation for `{algorithm}`.
-2. Modify only the parameters that must change for the current task.
-3. Output Python code only, with no explanations, comments, or markdown fences.
-
-Required changes for the current task:
-1. Build a `cmd` list for:
-   - `"python", "-u", "run.py"`
-2. The script must execute `run.py` with:
-   - `check=True`
-   - `cwd="./Time-Series-Library"`
-3. Infer the dataset information from the provided file paths:
-   - train file: `{data_path_train}`
-   - test file: `{data_path_test}`
-4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset files and model `{algorithm}`.
-5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
-
-Environment requirement:
-- The generated script must run correctly in an environment where CUDA may be unavailable.
-- Do not rely on GPU availability.
-- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
-- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
-
-Constraints:
-1. Prefer the official arguments from the documentation over guessed defaults.
-2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
-3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
-4. At the top of the script, import `os` and `subprocess`.
-5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
-
-Dataset metadata:
-{dataset_metadata}
-
-Return one executable Python script and nothing else.
-""")
-
-template_tslib_unlabeled = PromptTemplate.from_template("""
-You are an expert Python developer using **Time-Series-Library** for anomaly detection.
-
-Your task is to generate one runnable Python script that launches `run.py` through `subprocess`.
-
---- BEGIN DOCUMENTATION ---
-{algorithm_doc}
---- END DOCUMENTATION ---
-
-The documentation above contains the official script and parsed CLI arguments for `{algorithm}`. Use those official arguments as the starting point. Do not invent a fresh command from scratch.
-
-Your job:
-1. Start from the official CLI arguments in the documentation for `{algorithm}`.
-2. Modify only the parameters that must change for the current task.
-3. Output Python code only, with no explanations, comments, or markdown fences.
-
-Required changes for the current task:
-1. Build a `cmd` list for:
-   - `"python", "-u", "run.py"`
-2. The script must execute `run.py` with:
-   - `check=True`
-   - `cwd="./Time-Series-Library"`
-3. Infer the dataset information from the provided input file path:
-   - input file: `{data_path_train}`
-4. Update only the task-critical CLI arguments needed so the official command works for the provided dataset file and model `{algorithm}`.
-5. Apply user parameters from `{parameters}` only if they are valid CLI arguments supported by the current `run.py`.
-
-Environment requirement:
-- The generated script must run correctly in an environment where CUDA may be unavailable.
-- Do not rely on GPU availability.
-- If the official script assumes GPU execution, adapt the command so it runs safely on CPU instead.
-- Do not add environment settings such as `CUDA_VISIBLE_DEVICES` unless they are necessary for CPU-safe execution.
-
-Constraints:
-1. Prefer the official arguments from the documentation over guessed defaults.
-2. Do not invent extra CLI arguments that are not grounded in the documentation or supported by the current `run.py`.
-3. Keep the generated command as close as possible to the official script, changing only what is necessary for this task.
-4. At the top of the script, import `os` and `subprocess`.
-5. The final line must be exactly one `subprocess.run(...)` call that runs `cmd` with `check=True` and `cwd="./Time-Series-Library"`.
-
-Dataset metadata:
-{dataset_metadata}
-
-Return one executable Python script and nothing else.
-""")
-
 
 template_darts_labeled = PromptTemplate.from_template("""
 You are an expert Python developer with deep knowledge of the **Darts** library for forecasting-based time-series anomaly detection. Your task is to:
@@ -535,9 +528,7 @@ class AgentCodeGenerator:
         elif package_name == "pygod":
             tpl = template_pygod_labeled if data_path_test else template_pygod_unlabeled
         elif package_name == "tsb_ad":
-            tpl = template_tsb_ad_labeled if data_path_test else template_tsb_ad_unlabeled
-        elif package_name == "tslib": # tslib only has labeled data
-            tpl = template_tslib_labeled if data_path_test else template_tslib_unlabeled
+            tpl = template_tsb_ad_unlabeled if algorithm in Unsupervise_AD_Pool else template_tsb_ad_labeled
         else:
             tpl = template_darts_labeled if data_path_test else template_darts_unlabeled
 
@@ -559,8 +550,8 @@ class AgentCodeGenerator:
             })
         ).content
         cleaned = self._clean(raw)
-        # if package_name == "tslib":
-        #     cleaned = self._sanitize_tslib_args(cleaned)
+        if package_name == "tsb_ad":
+            cleaned = self._sanitize_tsb_ad_code(cleaned)
         print(f"Generated code: {cleaned}\n")
         return cleaned
 
@@ -579,7 +570,7 @@ class AgentCodeGenerator:
         # increase review counter here
         code_quality.review_count += 1
         cleaned = self._clean(fixed)
-        # return self._sanitize_tslib_args(cleaned)
+        cleaned = self._sanitize_tsb_ad_code(cleaned)
         return cleaned
 
 
@@ -618,62 +609,34 @@ class AgentCodeGenerator:
         return re.sub(r"```", "", code).strip()
 
     @staticmethod
-    def _sanitize_tslib_args(code: str) -> str:
-        """
-        Remove known unsupported tslib CLI args and normalize GPU flags.
-        This is a post-generation safety net for run.py argparse compatibility.
-        """
-        if "run.py" not in code:
+    def _sanitize_tsb_ad_code(code: str) -> str:
+        if "from TSB_AD.model_wrapper import run_" not in code or "**run_kwargs" not in code:
             return code
 
-        # Remove unsupported argument/value pairs when present in cmd lists.
-        for arg in ("fc_dropout", "head_dropout", "stride", "file_name"):
-            code = re.sub(
-                rf',\s*["\']--{arg}["\']\s*,\s*["\'][^"\']*["\']',
-                "",
-                code,
-            )
-
-        # Convert `--use_gpu`, "False" into `--no_use_gpu`.
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*["\']False["\']',
-            ', "--no_use_gpu"',
-            code,
-            flags=re.IGNORECASE,
-        )
-        # Handle lowercase false if unquoted token sneaks in list.
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*False',
-            ', "--no_use_gpu"',
-            code,
-        )
-        code = re.sub(
-            r',\s*["\']--use_gpu["\']\s*,\s*["\']false["\']',
-            ', "--no_use_gpu"',
-            code,
-            flags=re.IGNORECASE,
+        filter_block = (
+            "valid_params = inspect.signature(model_runner).parameters\n"
+            "if 'user_params' in locals() and isinstance(user_params, dict):\n"
+            "    run_kwargs = {\n"
+            "        k: v for k, v in user_params.items()\n"
+            "        if k in valid_params and k not in {\"data\", \"data_train\"}\n"
+            "    }\n"
+            "else:\n"
+            "    run_kwargs = {\n"
+            "        k: v for k, v in run_kwargs.items()\n"
+            "        if k in valid_params and k not in {\"data\", \"data_train\"}\n"
+            "    }\n\n"
         )
 
-        # Ensure run.py is referenced relative to the Time-Series-Library cwd.
-        code = code.replace("./Time-Series-Library/run.py", "run.py")
+        if filter_block in code:
+            return code
 
-        # Ensure run.py executes inside Time-Series-Library so exp_basic can find ./models.
-        # Covers both `subprocess.run(cmd)` and `subprocess.run(cmd, ...)` forms.
-        if "subprocess.run(cmd" in code:
-            def _add_cwd_if_missing(m):
-                args = m.group(1) or ""
-                if "cwd=" in args:
-                    return m.group(0)
-                if args.strip():
-                    return f'subprocess.run(cmd,{args}, cwd="./Time-Series-Library")'
-                return 'subprocess.run(cmd, cwd="./Time-Series-Library")'
+        score_call_pattern = re.compile(r"^(\s*)scores\s*=\s*model_runner\(", re.MULTILINE)
+        match = score_call_pattern.search(code)
+        if not match:
+            return code
 
-            code = re.sub(
-                r"subprocess\.run\(\s*cmd\s*(?:,\s*([^)]*))?\)",
-                _add_cwd_if_missing,
-                code,
-            )
-        return code
+        insert_at = match.start()
+        return code[:insert_at] + filter_block + code[insert_at:]
 
     @staticmethod
     def _extract_init_params_dict(response_text: str) -> dict:
@@ -699,9 +662,9 @@ if __name__ == "__main__":
   from agents.agent_selector import AgentSelector
   from agents.agent_info_miner import AgentInfoMiner
   user_input = {
-      "algorithm": ["Crossformer"],
-      "dataset_train": "SMAP_train.npy",
-      "dataset_test": "SMAP_test.npy",
+      "algorithm": ["IForest"],
+      "dataset_train": "demo_train.npy",
+      "dataset_test": "demo_test.npy",
       "parameters": {}
   }
   agentSelector = AgentSelector(user_input=user_input)# if want to unit test, please import AgentSelector

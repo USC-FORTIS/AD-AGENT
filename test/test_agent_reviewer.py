@@ -1,7 +1,5 @@
-import types
 import unittest
-from pathlib import Path
-import tempfile
+import types
 from unittest.mock import patch
 
 import numpy as np
@@ -19,6 +17,35 @@ class TestAgentReviewer(unittest.TestCase):
         self._print_patcher.start()
         self.addCleanup(self._print_patcher.stop)
 
+    def test_test_code_passes_feature_dim_to_prompt(self):
+        reviewer = AgentReviewer()
+        captured = {}
+
+        def fake_invoke(prompt_value):
+            captured["prompt"] = prompt_value.to_string()
+            return types.SimpleNamespace(content="```python\nprint('ok')\n```")
+
+        with patch.object(agent_reviewer_mod.llm, "invoke", side_effect=fake_invoke), patch.object(
+            reviewer,
+            "_execute_test_script",
+            return_value=types.SimpleNamespace(returncode=0, stdout="ok", stderr=""),
+        ):
+            err = reviewer.test_code(
+                "print('base')",
+                "SAND",
+                "tsb_ad",
+                feature_dim=7,
+                train_dataset="./data/swat_train.csv",
+                dataset_metadata={"feature_dim": 7},
+            )
+
+        self.assertEqual(err, "")
+        self.assertIn("feature_dim=7", captured["prompt"])
+        self.assertIn("train_length >= 1500", captured["prompt"])
+        self.assertIn("periodic base signal", captured["prompt"])
+        self.assertIn("base = base[:, None]", captured["prompt"])
+        self.assertIn("Do not invent fallback kwargs such as `window_size`, `threshold`, `normalize`, or `verbose`", captured["prompt"])
+
     def test_test_code_success(self):
         reviewer = AgentReviewer()
         with patch.object(
@@ -33,52 +60,17 @@ class TestAgentReviewer(unittest.TestCase):
             err = reviewer.test_code("print('base')", "IForest", "pyod")
         self.assertEqual(err, "")
 
-    def test_extract_tslib_root_path_from_cmd(self):
+    def test_run_script_for_validation_passes_package_name(self):
         reviewer = AgentReviewer()
-        code = (
-            'import subprocess\n'
-            'cmd = ["python", "-u", "run.py", "--task_name", "anomaly_detection", '
-            '"--is_training", "1", "--root_path", "./data/MSL", "--model_id", "MSL", '
-            '"--model", "LightTS", "--data", "MSL", "--features", "M", "--seq_len", "100", '
-            '"--pred_len", "0", "--d_model", "128", "--d_ff", "128", "--e_layers", "3", '
-            '"--enc_in", "55", "--c_out", "55", "--batch_size", "128", "--train_epochs", "10"]\n'
-            'subprocess.run(cmd)\n'
-        )
+        with patch.object(
+            reviewer,
+            "_execute_test_script",
+            return_value=types.SimpleNamespace(returncode=0, stdout="ok", stderr=""),
+        ) as mock_exec:
+            err = reviewer._run_script_for_validation("generated_scripts/IForest_test.py", "IForest", "pyod")
 
-        root = reviewer._extract_tslib_root_path(code)
-        self.assertEqual(root, Path("./data/MSL"))
-
-    def test_generate_tslib_synthetic_data_uses_prompt_output(self):
-        reviewer = AgentReviewer()
-        with tempfile.TemporaryDirectory() as td:
-            tmp_dir = Path(td)
-            train_path = tmp_dir / "MSL_train.npy"
-            np.save(train_path, np.zeros((4, 55), dtype=np.float32))
-            output_root = (tmp_dir / "generated_scripts" / "test_msl_root").resolve()
-            script = f"""
-import os
-import numpy as np
-root = r"{output_root}"
-os.makedirs(root, exist_ok=True)
-np.save(os.path.join(root, "MSL_train.npy"), np.zeros((4, 55), dtype=np.float32))
-np.save(os.path.join(root, "MSL_test.npy"), np.zeros((3, 55), dtype=np.float32))
-np.save(os.path.join(root, "MSL_test_label.npy"), np.zeros((3,), dtype=np.float32))
-"""
-            with patch.object(
-                agent_reviewer_mod.llm,
-                "invoke",
-                return_value=types.SimpleNamespace(content=script),
-            ):
-                root = reviewer._generate_tslib_synthetic_data(
-                    code=f'cmd = ["python", "-u", "run.py", "--data", "MSL", "--root_path", r"{output_root}"]',
-                    algorithm_name="LightTS",
-                    train_dataset=str(train_path),
-                )
-
-            self.assertEqual(root, output_root)
-            self.assertTrue((output_root / "MSL_train.npy").exists())
-            self.assertTrue((output_root / "MSL_test.npy").exists())
-            self.assertTrue((output_root / "MSL_test_label.npy").exists())
+        self.assertEqual(err, "")
+        mock_exec.assert_called_once_with("generated_scripts/IForest_test.py", "IForest", "pyod")
 
     def test_test_code_detects_nested_failure_from_stdout(self):
         reviewer = AgentReviewer()

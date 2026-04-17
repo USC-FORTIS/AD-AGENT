@@ -122,6 +122,24 @@ async def _fake_to_thread(func, *args, **kwargs):
 
 
 class TestMainOrchestration(unittest.TestCase):
+    def test_main_returns_nonzero_and_prints_clean_error_on_value_error(self):
+        with patch.object(main, "compiled_full_graph", types.SimpleNamespace(invoke=lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("selector rejected input")))), \
+             patch.object(main.asyncio, "to_thread", new=_fake_to_thread), \
+             patch("builtins.print") as mock_print:
+            result = asyncio.run(main.main())
+
+        self.assertEqual(result, 1)
+        printed = "\n".join(str(call.args[0]) for call in mock_print.call_args_list if call.args)
+        self.assertIn("Pipeline stopped", printed)
+        self.assertIn("selector rejected input", printed)
+
+    def test_route_selector_falls_back_to_code_quality_when_route_missing(self):
+        failing_cq = types.SimpleNamespace(error_message="docker failed", review_count=1)
+        success_cq = types.SimpleNamespace(error_message="", review_count=1)
+
+        self.assertEqual(main.route_selector({"code_quality": failing_cq}), "code_generator")
+        self.assertEqual(main.route_selector({"code_quality": success_cq}), "evaluator")
+
     def test_process_all_tools_requires_selector(self):
         with self.assertRaises(ValueError):
             main.process_all_tools({"agent_selector": None})

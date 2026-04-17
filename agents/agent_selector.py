@@ -9,44 +9,12 @@ from ad_model_selection.prompts.pyod_ms_prompt import generate_model_selection_p
 from ad_model_selection.prompts.tsb_ad_ms_prompt import generate_model_selection_prompt_from_tsb_ad
 from ad_model_selection.prompts.timeseries_ms_prompt import generate_model_selection_prompt_from_timeseries
 from utils.openai_client import query_openai
-from utils.tsb_ad_registry import TSB_AD_SINGLE_INPUT_ALGORITHMS, is_tsb_ad_algorithm
-from utils.algorithm_registry import PYOD_ALGORITHMS, PYGOD_ALGORITHMS
-
-# Known Time-Series-Library directory-based datasets
-_TSLIB_DIR_DATASETS = {"MSL", "PSM", "SMAP", "SMD", "SWaT"}
-_TSLIB_ALGORITHMS = {
-    "Autoformer",
-    "DLinear",
-    "ETSformer",
-    "FEDformer",
-    "Informer",
-    "LightTS",
-    "Pyraformer",
-    "Reformer",
-    "TimesNet",
-    "Transformer",
-}
-_DARTS_ALGORITHMS = {
-    "GlobalNaiveAggregate",
-    "GlobalNaiveDrift",
-    "GlobalNaiveSeasonal",
-    "RNNModel",
-    "BlockRNNModel",
-    "NBEATSModel",
-    "NHiTSModel",
-    "TCNModel",
-    "TransformerModel",
-    "TFTModel",
-    "DLinearModel",
-    "NLinearModel",
-    "TiDEModel",
-    "TSMixerModel",
-    "LinearRegressionModel",
-    "RandomForest",
-    "LightGBMModel",
-    "XGBModel",
-    "CatBoostModel",
-}
+from utils.tsb_ad_registry import (
+    Semisupervise_AD_Pool,
+    TSB_AD_SINGLE_INPUT_ALGORITHMS,
+    is_tsb_ad_algorithm,
+)
+from utils.algorithm_registry import PYOD_ALGORITHMS, PYGOD_ALGORITHMS, is_pyod_algorithm, is_pygod_algorithm
 
 # ---------------------------------------------------------------------------
 # Deterministic metadata extraction scripts (executed in sandbox, no LLM)
@@ -124,21 +92,6 @@ except Exception as e:
     print("META:" + json.dumps({{"error": str(e)}}))
 '''
 
-_METADATA_SCRIPT_TSLIB = '''\
-import json, numpy as np
-path = "{data_path}"
-try:
-    arr = np.load(path)
-    meta = {{
-        "format": ".npy",
-        "num_samples": int(arr.shape[0]),
-        "feature_dim": int(arr.shape[1]) if arr.ndim > 1 else 1,
-    }}
-    print("META:" + json.dumps(meta))
-except Exception as e:
-    print("META:" + json.dumps({{"error": str(e)}}))
-'''
-
 _METADATA_SCRIPT_TSB_AD = '''\
 import json, os, numpy as np
 path = "{data_path}"
@@ -190,6 +143,7 @@ class AgentSelector:
 
         self.tools = None
         self.set_tools()
+        self._validate_selected_inputs()
 
         print(f"Package name: {self.package_name}")
         print(f"Algorithm: {self.algorithm}")
@@ -204,11 +158,9 @@ class AgentSelector:
         if requested_package:
             return requested_package
         basename = os.path.basename(train_path.rstrip("/"))
-        if basename in _TSLIB_DIR_DATASETS:
-            return "tslib"
         ext = os.path.splitext(train_path)[1].lower()
         if ext == ".npy":
-            return "tslib"
+            return "tsb_ad"
         if ext == ".pt":
             return "pygod"
         # .mat and .csv default to pyod; csv may be reclassified after metadata
@@ -224,15 +176,9 @@ class AgentSelector:
         normalized = [str(algo).strip() for algo in algorithms if str(algo).strip()]
         if not normalized or normalized[0].lower() == "all":
             return None
-
-        basename = os.path.basename(train_path.rstrip("/"))
         ext = os.path.splitext(train_path)[1].lower()
-        time_series_like = basename in _TSLIB_DIR_DATASETS or ext in {".npy", ".npz", ".csv"}
+        time_series_like = ext in {".npy", ".npz", ".csv"}
 
-        if any(algo in _DARTS_ALGORITHMS for algo in normalized):
-            return "darts"
-        if any(algo in _TSLIB_ALGORITHMS for algo in normalized):
-            return "tslib"
         if time_series_like and any(is_tsb_ad_algorithm(algo) for algo in normalized):
             return "tsb_ad"
         return None
@@ -249,11 +195,6 @@ class AgentSelector:
 
         self.package_name = self._detect_package(train_path, self.user_input.get("algorithm"))
         self.metadata = {}
-
-        # tslib directory datasets have no single file to inspect
-        if os.path.basename(train_path.rstrip("/")) in _TSLIB_DIR_DATASETS:
-            self.metadata = {"num_samples": None, "feature_dim": None}
-            return
 
         # Map local files → volume paths so they use reliable volume upload
         data_files, volume_train = self._build_data_files_for_volume(train_path)
@@ -292,7 +233,7 @@ class AgentSelector:
             self.package_name = "darts"
 
         # Set time-series feature-dependent parameters from metadata
-        if self.package_name in {"tslib", "tsb_ad"} and self.feature_dim and self.feature_dim > 0:
+        if self.package_name in {"tsb_ad"} and self.feature_dim and self.feature_dim > 0:
             self.parameters["enc_in"] = self.feature_dim
             self.parameters["c_out"] = self.feature_dim
 
@@ -306,8 +247,6 @@ class AgentSelector:
             return _METADATA_SCRIPT_PYGOD.format(data_path=train_path)
         if package_name == "tsb_ad":
             return _METADATA_SCRIPT_TSB_AD.format(data_path=train_path)
-        if package_name == "tslib":
-            return _METADATA_SCRIPT_TSLIB.format(data_path=train_path)
         # pyod handles both .mat and .csv
         return _METADATA_SCRIPT_PYOD.format(data_path=train_path)
 
@@ -410,6 +349,48 @@ class AgentSelector:
         self.algorithm = [algorithm]
         self.tools = [algorithm]
         print("Selector Parameters:", self.parameters)
+
+    def _validate_selected_inputs(self):
+        if not self.tools or self.package_name != "tsb_ad":
+            return
+
+        selected = [str(tool).strip() for tool in self.tools if str(tool).strip()]
+        if not selected:
+            return
+
+        if all(self._is_unsupervised_algorithm(tool) for tool in selected):
+            if not self.data_path_test:
+                return
+            joined = ", ".join(selected)
+            raise ValueError(
+                "TSB-AD unsupervised algorithms accept only a training dataset. "
+                f"Remove dataset_test for: {joined}."
+            )
+
+        if all(tool in Semisupervise_AD_Pool for tool in selected):
+            joined = ", ".join(selected)
+            if not self.data_path_test:
+                self.data_path_test = self.data_path_train
+                self.user_input["dataset_test"] = self.data_path_train
+                print(
+                    "Selector auto-filled dataset_test with dataset_train for semisupervised "
+                    f"algorithm(s): {joined}."
+                )
+                return
+            if os.path.abspath(self.data_path_train) == os.path.abspath(self.data_path_test):
+                raise ValueError(
+                    "TSB-AD semisupervised algorithms require dataset_test to be different "
+                    f"from dataset_train for: {joined}."
+                )
+
+    def _is_unsupervised_algorithm(self, algorithm_name: str) -> bool:
+        if self.package_name == "pyod":
+            return is_pyod_algorithm(algorithm_name)
+        if self.package_name == "pygod":
+            return is_pygod_algorithm(algorithm_name)
+        if self.package_name == "tsb_ad":
+            return algorithm_name in TSB_AD_SINGLE_INPUT_ALGORITHMS
+        return False
 
     def generate_tools(self, algorithm_input):
         """Generates the tools for the agent."""

@@ -51,7 +51,16 @@ def decide_next(state: FullToolState) -> dict:
 
 
 def route_selector(state: FullToolState):
-    return state["route"]
+    route = state.get("route")
+    if route:
+        return route
+
+    cq = state.get("code_quality")
+    if cq is None:
+        return "evaluator"
+
+    need_rerun = bool(getattr(cq, "error_message", "")) and getattr(cq, "review_count", 0) < 4
+    return "code_generator" if need_rerun else "evaluator"
 
 
 single_tool_graph = StateGraph(FullToolState)
@@ -143,17 +152,23 @@ async def main():
         "agent_processor": AgentProcessor(),
         "agent_selector": None,
         "experiment_config": None,
-        "results": None,
-        "algorithm_doc": None,
-        "feature_dim": None,
+        "results"         : None,
+        "algorithm_doc"   : None,
+        "metadata"        : None,
     }
 
     print("\n=== [Main] Starting full pipeline ===")
-    final_state = await asyncio.to_thread(
-        compiled_full_graph.invoke,
-        state,
-        config={"recursion_limit": 20},
-    )
+    try:
+        final_state = await asyncio.to_thread(
+            compiled_full_graph.invoke,
+            state,
+            config={"recursion_limit": 20},
+        )
+    except ValueError as exc:
+        print("\n=== [Main] Pipeline stopped ===")
+        print(f"Error: {exc}")
+        return 1
+
     print("\n=== [Main] Pipeline finished ===")
 
     for tool, tstate in final_state.get("results", []):
@@ -166,6 +181,8 @@ async def main():
         else:
             print(f"[{tool}] Error: {cq.error_message if cq else 'Unknown'}")
 
+    return 0
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))

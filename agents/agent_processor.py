@@ -10,7 +10,11 @@ AgentProcessor - Using Few-shot Chain-of-Thought (CoT) Extraction
 import os
 import re
 import json
+import sys
 import openai
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.tsb_ad_registry import Unsupervise_AD_Pool, Semisupervise_AD_Pool
 
 
 class AgentProcessor:
