@@ -46,6 +46,32 @@ class TestAgentReviewer(unittest.TestCase):
         self.assertIn("base = base[:, None]", captured["prompt"])
         self.assertIn("Do not invent fallback kwargs such as `window_size`, `threshold`, `normalize`, or `verbose`", captured["prompt"])
 
+    def test_test_code_pygod_prompt_requests_small_graphs_and_short_training(self):
+        reviewer = AgentReviewer()
+        captured = {}
+
+        def fake_invoke(prompt_value):
+            captured["prompt"] = prompt_value.to_string()
+            return types.SimpleNamespace(content="```python\nprint('ok')\n```")
+
+        with patch.object(agent_reviewer_mod.llm, "invoke", side_effect=fake_invoke), patch.object(
+            reviewer,
+            "_execute_test_script",
+            return_value=types.SimpleNamespace(returncode=0, stdout="ok", stderr=""),
+        ):
+            reviewer.test_code(
+                "print('base')",
+                "AnomalyDAE",
+                "pygod",
+                feature_dim=32,
+                train_dataset="./data/inj_cora_train.pt",
+                dataset_metadata={"num_features": 32},
+            )
+
+        self.assertIn("num_nodes <= 400", captured["prompt"])
+        self.assertIn("num_edges <= 1600", captured["prompt"])
+        self.assertIn("epoch", captured["prompt"])
+
     def test_test_code_success(self):
         reviewer = AgentReviewer()
         with patch.object(

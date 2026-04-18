@@ -39,7 +39,10 @@ TASK:
 
 Package-specific rules:
 - For PyOD: use `from pyod.utils.data import generate_data` which returns 4 values: `X_train, X_test, y_train, y_test = generate_data(n_train=200, n_test=100, contamination=0.1, n_features=feature_count)`. Always unpack all 4 values. Use `feature_count` for `n_features` so the synthetic data matches `{train_dataset}`.
-- For PyGOD: build a synthetic graph dataset and make sure `num_features` matches the training data from `{train_dataset}`.
+- For PyGOD: build a SMALL synthetic graph dataset and make sure `num_features` matches the training data from `{train_dataset}`.
+  Keep reviewer workloads lightweight: prefer roughly `num_nodes <= 400`, `num_edges <= 1600`, and CPU-only execution.
+  If the model supports training-length parameters such as `epoch`, `num_epoch`, or similar, set them to a small value (for example 3-5) unless the original script already uses a smaller value.
+  Preserve valid user-provided hyperparameters when possible, but do not keep heavy defaults that make the synthetic validation time out.
 - For Darts: create synthetic `TimeSeries` data and make sure `n_features` matches the training data from `{train_dataset}`.
 - For TSB-AD: create raw numpy arrays directly, keep any `from TSB_AD.model_wrapper import run_...` import and wrapper call style unchanged, and ensure score lengths still match the synthetic sample count.
   Preserve any `inspect.signature(model_runner).parameters`-based kwargs filtering already present in the script.

@@ -107,6 +107,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
        `train_data.y = (train_data.y != 0).long()`
        `test_data.y = (test_data.y != 0).long()`
    (4) Initialize the specified algorithm `{algorithm}` with the provided parameters `{parameters}`(if parameters applicable) using variable `model`, strictly following the documentation excerpt.
+       If the model supports training-length parameters such as `epoch` and the user did not provide them, prefer a small CPU-safe value such as `epoch=5` for generated scripts.
    (5) Train the model using `model.fit(train_data)`.
    (6) Predict on the test data using `pred, score = model.predict(test_data, return_score=True)`.
    (7) Extract the true labels and corresponding scores using the test mask:
@@ -140,6 +141,7 @@ You are an expert Python developer with deep experience in anomaly detection lib
    (1) Import sys, os, torch, and include the command `sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))`&`from pygod.detector import {algorithm}`
    (2) Load training using `torch.load` with parameter `weights_only=False` from the file paths `{data_path_train}`
    (4) Initialize the specified algorithm `{algorithm}` with the provided parameters `{parameters}`(if parameters applicable) using variable `model`, strictly following the documentation excerpt.
+       If the model supports training-length parameters such as `epoch` and the user did not provide them, prefer a small CPU-safe value such as `epoch=5` for generated scripts.
    (5) Train the model using `model.fit(train_data)`.
    (6) Predict on the test data using `pred, score = model.predict(train_data, return_score=True)`.
    (7) Compute the total number of predicted anomalies:  

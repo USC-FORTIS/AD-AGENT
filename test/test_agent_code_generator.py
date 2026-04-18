@@ -52,6 +52,20 @@ class TestAgentCodeGenerator(unittest.TestCase):
 
         self.assertEqual(code, "print('tsb_ad')")
 
+    def test_pygod_prompt_prefers_small_epoch_when_user_did_not_provide_one(self):
+        rendered = agent_code_generator_mod.template_pygod_labeled.invoke(
+            {
+                "algorithm": "AnomalyDAE",
+                "data_path_train": "./data/inj_cora_train.pt",
+                "data_path_test": "./data/inj_cora_test.pt",
+                "algorithm_doc": "official doc",
+                "parameters": "{}",
+                "dataset_metadata": "{}",
+            }
+        ).to_string()
+
+        self.assertIn("epoch=5", rendered)
+
     # ------------------------------------------------------------------ #
     # Template selection: unsupervised vs semisupervised                  #
     # ------------------------------------------------------------------ #
