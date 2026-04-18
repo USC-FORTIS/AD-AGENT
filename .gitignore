@@ -181,13 +181,9 @@ cython_debug/
 data/
 
 # Ignore generated files
-/generated_scripts
-train_data_loader.py
-test_data_loader.py
+/runtime
 cache.json
 cache.json.lock
-head_train_data_loader.py
-head_test_data_loader.py
 /config/config.py
 /dataset
-/Time-Series-Library
+/data
