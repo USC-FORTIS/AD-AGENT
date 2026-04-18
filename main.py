@@ -26,7 +26,7 @@ api_key = os.getenv("OPENAI_API_KEY") or Config.OPENAI_API_KEY
 if not api_key:
     raise ValueError(
         "OPENAI_API_KEY is missing. Set environment variable OPENAI_API_KEY "
-        "or set Config.OPENAI_API_KEY in config/config.py."
+        "or set Config.OPENAI_API_KEY in src/config/config.py."
     )
 os.environ["OPENAI_API_KEY"] = api_key
 logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
