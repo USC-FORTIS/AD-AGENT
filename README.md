@@ -2,7 +2,7 @@
 
 **AD-AGENT** is an LLM‑driven multi-agent anomaly detection platform designed to support the full lifecycle of real-world anomaly detection—from data preprocessing and model selection to detection, explanation, and evaluation. It integrates classical and graph-based AD algorithms with LLM-powered modules for enhanced usability, privacy, and adaptability.
 
-![flowchart](./figs/flowchart.jpg)
+![flowchart](./assets/figures/flowchart.jpg)
 
 > 🔍 One platform. Multiple agents. All your anomaly detection workflows—automated, explainable, and secure.
 
@@ -111,7 +111,7 @@ python main.py -o
 You can import and use the pipeline stages directly without running the full CLI flow.
 
 ```python
-from pipeline_api import (
+from api.pipeline import (
   build_state,
   run_selector,
   run_info_miner,
@@ -161,7 +161,7 @@ Run GlobalNaiveAggregate on ./data/yahoo_train.csv and ./data/yahoo_test.csv
 
 ```
 
-<img src="./figs/shortcut.jpg" alt="shortcut" style="zoom:30%;" />
+<img src="./assets/figures/shortcut.jpg" alt="shortcut" style="zoom:30%;" />
 
 ### Run All Algorithms
 
@@ -191,8 +191,8 @@ Run all on ./data/glass_train.mat and ./data/glass_test.mat
 
 ## 📊 Experiments
 
-- Pipeline generation performance by library, showing success rate (code runs without error), average latency, LLM token usage (input/output), and per-pipeline billing cost in US dollars. The time spent in Reviewer is related to the complexity of models, which explains the increase in TSLib. **AD-AGENT demonstrates high reliability in producing valid pipelines across modalities, with low latency and manageable cost.**![success_table](./figs/success_table.jpg)
-- Model selection results for PyOD and PyGOD. We display the average AUROC of models recommended by querying the reasoning LLM three times (duplicates allowed). "Best Performance" marks the highest performance achieved by any available model for each dataset, while "Average Baseline" denotes the mean performance across all available models. **The LLM's recommendations substantially exceed the average baseline and closely track the best performance in most datasets.**![model_selection](./figs/model_selection.jpg)
+- Pipeline generation performance by library, showing success rate (code runs without error), average latency, LLM token usage (input/output), and per-pipeline billing cost in US dollars. The time spent in Reviewer is related to the complexity of models, which explains the increase in TSLib. **AD-AGENT demonstrates high reliability in producing valid pipelines across modalities, with low latency and manageable cost.**![success_table](./assets/figures/success_table.jpg)
+- Model selection results for PyOD and PyGOD. We display the average AUROC of models recommended by querying the reasoning LLM three times (duplicates allowed). "Best Performance" marks the highest performance achieved by any available model for each dataset, while "Average Baseline" denotes the mean performance across all available models. **The LLM's recommendations substantially exceed the average baseline and closely track the best performance in most datasets.**![model_selection](./assets/figures/model_selection.jpg)
 
 ---
 

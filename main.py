@@ -3,6 +3,11 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 # Parse sandbox mode before importing any sandbox-aware modules.
 _parser = argparse.ArgumentParser(add_help=False)
@@ -28,7 +33,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
 
 from langgraph.graph import END, StateGraph
 
-from pipeline_interface import (
+from api.pipeline import (
     FullToolState,
     run_code_generator,
     run_evaluator,
@@ -45,9 +50,9 @@ from agents.agent_info_miner import AgentInfoMiner
 from agents.agent_optimizer import AgentOptimizer
 from agents.agent_processor import AgentProcessor
 from agents.agent_reviewer import AgentReviewer
-from entity.code_quality import CodeQuality
+from models.code_quality import CodeQuality
 try:
-    from pipeline_interface import log_local
+    from api.pipeline import log_local
 except ImportError:
     _LAST_LOG_CONTEXT: tuple[str, str | None] | None = None
 
