@@ -2,6 +2,8 @@
 
 **AD-AGENT** is an LLM-driven multi-agent framework for end-to-end anomaly detection. Describe the detection task or workflow you want to run in natural language, and AD-AGENT will pick a model, generate the code, validate it, and produce results — all through a coordinated pipeline of specialized agents.
 
+**Website:** [https://usc-fortis.github.io/AD-AGENT/](https://usc-fortis.github.io/AD-AGENT/) &nbsp;•&nbsp; **Paper:** [arXiv:2505.12594](https://arxiv.org/abs/2505.12594)
+
 ![flowchart](./assets/figures/flowchart.jpg)
 
 > One platform. Multiple agents. End-to-end anomaly detection workflows, automated and explainable.
