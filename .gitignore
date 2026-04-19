@@ -182,6 +182,8 @@ data/
 
 # Ignore generated files
 /runtime
+/generated_scripts
+/Time-Series-Library
 cache.json
 cache.json.lock
 /config/config.py

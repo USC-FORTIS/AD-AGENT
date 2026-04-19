@@ -14,13 +14,13 @@ _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--sandbox", choices=["modal", "docker"], default=None)
 _known, _ = _parser.parse_known_args()
 if _known.sandbox:
-    os.environ["OPENAD_SANDBOX"] = _known.sandbox
+    os.environ["ADAGENT_SANDBOX"] = _known.sandbox
 
 from config.config import Config
 try:
     from sandbox.config import SANDBOX_MODE
 except ModuleNotFoundError:
-    SANDBOX_MODE = os.environ.get("OPENAD_SANDBOX", "modal")
+    SANDBOX_MODE = os.environ.get("ADAGENT_SANDBOX") or os.environ.get("OPENAD_SANDBOX", "modal")
 
 api_key = os.getenv("OPENAI_API_KEY") or Config.OPENAI_API_KEY
 if not api_key:

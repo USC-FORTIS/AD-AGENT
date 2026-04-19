@@ -1,189 +1,235 @@
-# AD-AGENT: Dual Sandbox Execution Architecture
+# AD-AGENT Sandbox Configuration
 
-## Overview
+This note describes the current sandbox implementation in the refactored codebase under `src/sandbox/`.
 
-AD-AGENT adopts a **two-layer architecture**: a lightweight agent environment on the host machine, and an isolated execution environment (Docker or Modal) for running generated ML code. This cleanly separates the "brain" (LLM agents) from the "hands" (code execution), so users never need to install heavy ML dependencies locally.
+The important distinction is:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Host Machine                         │
-│                                                         │
-│  ┌───────────────────────────────────┐                  │
-│  │      Agent Environment            │                  │
-│  │  (pip install ad-agent)           │                  │
-│  │                                   │                  │
-│  │  LangGraph / LangChain            │                  │
-│  │  OpenAI SDK / Bedrock SDK         │                  │
-│  │  Config & Routing Logic           │                  │
-│  └──────────────┬────────────────────┘                  │
-│                                                         │ 
-        subprocess.run()                                  |
-│          execute_code()                                 │
-│           │            │                                │
-│     ┌─────┘            └──────┐                         │
-│     ▼                         ▼                         │
-│  ┌──────────────┐   ┌─────────────────┐                 │
-│  │ Docker Mode  │   │  Modal Mode     │                 │
-│  │ (local)      │   │  (cloud)        │                 │
-│  │              │   │                 │                 │
-│  │ pyod/torch/  │   │  Same deps,     │                 │
-│  │ darts/etc.   │   │  remote infra   │                 │
-│  │              │   │                 │                 │
-│  │ Free, offline│   │  Pay-per-use    │                 │
-│  │ Your hardware│   │  Cloud GPU/CPU  │                 │
-│  └──────────────┘   └─────────────────┘
-|                                                         |
-└─────────────────────────────────────────────────────────┘
-```
+- The agent workflow runs in the local Python process.
+- Only generated model scripts are executed inside a sandbox backend.
 
-## Two Execution Modes
+That means `processor`, `selector`, `info_miner`, `code_generator`, `reviewer`, and `evaluator` logs are printed by the host process, while the generated script's `stdout` and `stderr` are streamed from Docker or Modal into the same terminal.
 
-| | Docker | Modal |
-|---|---|---|
-| **Where** | Local Docker container | Modal cloud sandbox |
-| **Cost** | Free | Pay-per-use |
-| **Network** | Offline OK | Requires internet |
-| **GPU** | Uses local GPU if available | Cloud GPU |
-| **Best for** | Development, testing | Production, large-scale runs |
-| **Isolation** | Container-level | Container-level (remote) |
+## Relevant Files
 
-Both modes use **identical dependency sets** — the Dockerfiles mirror the Modal image definitions exactly, so results are reproducible across modes.
+- `main.py`
+- `src/sandbox/config.py`
+- `src/sandbox/executor.py`
+- `src/sandbox/docker_images.py`
+- `src/sandbox/modal_images.py`
+- `src/sandbox/dockerfiles/`
 
-## How It Works
+## Supported Backends
 
-### Execution Flow
+AD-AGENT currently supports two sandbox backends:
 
-```
-User runs: python main.py --sandbox docker
-                │
-                ▼
-    main.py parses --sandbox flag
-    sets OPENAD_SANDBOX=docker env var
-    (before any agent imports)
-                │
-                ▼
-    Agent pipeline runs (Processor → Selector → InfoMiner
-    → CodeGenerator → Reviewer → Evaluator → Optimizer)
-                │
-                ▼
-    When code needs to run, executor.execute_code() is called
-                │
-                ▼
-    sandbox/config.py routes to the correct backend
-                │
-        ┌───────┴────────┐
-        ▼                ▼
-    _execute_docker()  _execute_modal()
-```
+- `modal`
+- `docker`
 
-### Docker Mode Details
+The backend is selected once at process startup and then used by `src/sandbox/executor.py`.
 
-```
-_execute_docker(code, algorithm_name, package_name, data_files, timeout)
-        │
-        ├─ 1. ensure_image(package_name)
-        │      docker image inspect openad-pyod:latest
-        │        ├─ exists → use cached image (instant)
-        │        └─ missing → docker build from Dockerfile (first time only)
-        │
-        ├─ 2. Write generated code to temp file
-        │
-        ├─ 3. docker run --rm --memory=4g --cpus=2
-        │        -v script.py:/workspace/script.py:ro
-        │        -v data_file:/path/in/container:ro
-        │        openad-pyod:latest python /workspace/script.py
-        │
-        ├─ 4. Capture stdout / stderr / returncode
-        │
-        └─ 5. Cleanup temp file (in finally block)
-```
+## Configuration Resolution
 
-Key design choices:
-- **`--rm`**: Container auto-deletes after execution, no leftover state
-- **`:ro` mounts**: Code and data are read-only inside the container
-- **Resource limits**: `--memory=4g --cpus=2` prevents runaway processes
-- **Docker CLI via subprocess**: No `docker` Python SDK needed, zero extra dependencies
-- **Build-once cache**: `docker image inspect` check before building
+Sandbox mode is resolved in this order:
 
-### Configuration Priority
+1. `--sandbox` CLI flag passed to `main.py`
+2. `ADAGENT_SANDBOX` environment variable
+3. legacy `OPENAD_SANDBOX` environment variable
+4. `src/config/settings.yaml` if present
+5. default: `modal`
 
-```
---sandbox CLI flag          (highest priority)
-        ↓
-config/settings.yaml        (persistent config)
-  system.sandbox_mode
-        ↓
-default: "modal"            (lowest priority)
-```
+The CLI flag works by setting `ADAGENT_SANDBOX` before sandbox-aware imports happen in `main.py`, so it is effectively the highest-priority override for normal CLI usage.
 
-## Files Changed
+Valid values are:
 
-### New Files
+- `modal`
+- `docker`
 
-| File | Purpose |
-|---|---|
-| `sandbox/docker_images.py` | `DOCKER_IMAGE_MAP` + `ensure_image()` — manages Docker image lifecycle |
-| `sandbox/dockerfiles/Dockerfile.pyod` | pyod, numpy, scikit-learn, pandas |
-| `sandbox/dockerfiles/Dockerfile.pygod` | pygod, torch, torch-geometric, numpy |
-| `sandbox/dockerfiles/Dockerfile.darts` | darts, torch, numpy, pandas |
-| `sandbox/dockerfiles/Dockerfile.tslib` | torch, numpy, pandas, scikit-learn + Time-Series-Library repo |
-
-### Modified Files
-
-| File | Change |
-|---|---|
-| `sandbox/config.py` | Added `_load_sandbox_mode()` with env var → settings.yaml → default fallback chain, validation |
-| `sandbox/executor.py` | Added `_execute_docker()` function, removed `_execute_locally()` (replaced by Docker) |
-| `config/settings.yaml` | Added `sandbox_mode: "modal"` under `system:` |
-| `main.py` | Added early `--sandbox` argparse before agent imports to set env var in time |
-
-
-### Removed
-
-- **Local subprocess mode** (`_execute_locally`) — Docker fully replaces it with proper isolation. No reason to run ML code in the host Python environment.
-
-## Usage
+Example:
 
 ```bash
-# Docker mode (local, free, offline)
-python main.py --sandbox docker
-
-# Modal mode (cloud, pay-per-use) — default
-python main.py --sandbox modal
-
-# Use default from settings.yaml
-python main.py
+ADAGENT_SANDBOX=modal .venv/bin/python -u main.py --sandbox modal
+ADAGENT_SANDBOX=docker .venv/bin/python -u main.py --sandbox docker
 ```
 
-Or set persistently in `config/settings.yaml`:
+If you want a persistent local default, create `src/config/settings.yaml` with:
+
 ```yaml
 system:
-  sandbox_mode: "docker"
+  sandbox_mode: docker
 ```
 
-## Test Results
+At the moment, no `settings.yaml` is committed in the repo, so the fallback path is optional rather than required.
 
-Tested on Docker v28.3.3 (macOS):
+## Debug Mode
 
-```
-# 1. Image build — auto-builds on first call
->>> ensure_image('pyod')
-[Docker] Building image openad-pyod:latest ...
-[Docker] Image openad-pyod:latest built successfully.
-'openad-pyod:latest'
+Modal has an additional debug flag:
 
-# 2. Image cache — skips build on subsequent calls
->>> ensure_image('pyod')
-'openad-pyod:latest'          # no build, instant return
-
-# 3. Code execution — runs in container, returns output
->>> execute_code('print(42)', 'test', 'pyod')
-('42\n', '', 0)               # stdout, stderr, returncode
+```bash
+ADAGENT_SANDBOX_DEBUG=1
 ```
 
-## Next Steps
+When enabled:
 
-- [ ] Test remaining images (pygod, darts, tslib)
-- [ ] Test with real dataset through full pipeline (`--sandbox docker`)
-- [ ] Test Modal mode still works as before
-- [ ] Package as `ad-agent` Python package (pyproject.toml + CLI entrypoint)
+- Modal sandboxes get longer timeout and idle-timeout values.
+- Completed or failed sandboxes are retained instead of terminated immediately.
+- The executor prints sandbox inspection hints such as `modal shell <sandbox-id>`.
+
+This is implemented in `src/sandbox/executor.py`.
+
+There is no equivalent retained-container debug mode for Docker right now. Docker runs use `--rm`, so containers are removed after execution.
+
+The code still reads legacy `OPENAD_SANDBOX_DEBUG` for backward compatibility, but new usage should prefer `ADAGENT_SANDBOX_DEBUG`.
+
+## Modal Prerequisite
+
+If you use the `modal` backend, you need the Modal CLI installed and authenticated at least once on the host machine.
+
+Typical setup:
+
+```bash
+pip install modal
+modal setup
+```
+
+After that, `main.py --sandbox modal` can create the app, volume, and sandbox objects it needs. If your team uses token-based auth instead of browser login, configure Modal the same way you normally do for the CLI before running AD-AGENT.
+
+## Modal Execution
+
+Modal execution is implemented in `_execute_modal()` in `src/sandbox/executor.py`.
+
+Current behavior:
+
+- Looks up or creates Modal app `adagent-sandbox`
+- Looks up or creates Modal volume `adagent-data`
+- Uploads data files destined for `/data`
+- Creates symlinks for non-`/data` paths when needed
+- Writes generated code to `/workspace/<algorithm>_run.py`
+- Executes `python /workspace/<algorithm>_run.py`
+- Streams process `stdout` and `stderr` directly into the local terminal
+
+Important paths inside Modal:
+
+- workdir: `/workspace`
+- persistent volume mount: `/data`
+
+Current Modal-specific configuration constants:
+
+- `MODAL_APP_NAME = "adagent-sandbox"`
+- `MODAL_VOLUME_NAME = "adagent-data"`
+- `DEFAULT_TIMEOUT = 120`
+
+## Docker Execution
+
+Docker execution is implemented in `_execute_docker()` in `src/sandbox/executor.py`.
+
+Current behavior:
+
+- Resolves an image tag via `src/sandbox/docker_images.py`
+- Builds the image on demand if it is not available locally
+- Writes generated code to a local temp file
+- Mounts that file read-only at `/workspace/script.py`
+- Mounts any provided dataset files read-only at their requested in-container paths
+- Runs the container with resource limits
+- Captures and returns `stdout`, `stderr`, and `returncode`
+
+Current Docker run settings:
+
+- `--rm`
+- `--memory=4g`
+- `--cpus=2`
+
+## Package-to-Image Mapping
+
+Both backends support the same package names:
+
+- `pyod`
+- `pygod`
+- `darts`
+- `tslib`
+- `tsb_ad`
+
+### Docker
+
+Defined in `src/sandbox/docker_images.py`.
+
+Current image tags:
+
+- `adagent-pyod:latest`
+- `adagent-pygod:latest`
+- `adagent-darts:latest`
+- `adagent-tslib:latest`
+- `adagent-tsb-ad:latest`
+
+Dockerfiles live under `src/sandbox/dockerfiles/`.
+
+### Modal
+
+Defined in `src/sandbox/modal_images.py`.
+
+Each package has a dedicated `modal.Image` definition, for example:
+
+- `PYOD_IMAGE`
+- `PYGOD_IMAGE`
+- `DARTS_IMAGE`
+- `TSLIB_IMAGE`
+- `TSB_AD_IMAGE`
+
+`pygod` is special because it installs PyG wheel dependencies explicitly:
+
+- `pyg_lib`
+- `torch_scatter`
+- `torch_sparse`
+- `torch_cluster`
+- `torch-geometric`
+
+This is necessary for graph workflows that depend on PyG samplers and sparse ops.
+
+## Logging Behavior
+
+Current logging behavior is intentional:
+
+- workflow stage logs such as `[main]`, `[selector]`, `[reviewer]` are printed by the host process
+- sandbox script output is streamed into the same terminal
+- Modal app logs are not the canonical place to read full workflow output
+
+In practice:
+
+- watch the local terminal while the workflow is running
+- use `ADAGENT_SANDBOX_DEBUG=1` only when you need to inspect a retained Modal sandbox afterward
+
+## Practical Commands
+
+Run with Modal:
+
+```bash
+ADAGENT_SANDBOX=modal PYTHONUNBUFFERED=1 .venv/bin/python -u main.py --sandbox modal
+```
+
+Run with Docker:
+
+```bash
+ADAGENT_SANDBOX=docker PYTHONUNBUFFERED=1 .venv/bin/python -u main.py --sandbox docker
+```
+
+Run with Modal debug retention:
+
+```bash
+ADAGENT_SANDBOX=modal ADAGENT_SANDBOX_DEBUG=1 PYTHONUNBUFFERED=1 .venv/bin/python -u main.py --sandbox modal
+```
+
+## Current Caveats
+
+- `main.py` currently injects `src/` into `sys.path` as a transition measure.
+- The host process still owns workflow orchestration; sandboxes only execute generated scripts.
+- `tslib` support exists in the sandbox layer, but it is not the current priority path.
+- Runtime artifacts should live under `runtime/`; legacy `generated_scripts/` should be treated as old leftovers.
+
+## Recommendation
+
+If you update sandbox behavior, update this file alongside:
+
+- backend selection logic in `src/sandbox/config.py`
+- execution behavior in `src/sandbox/executor.py`
+- image definitions in `src/sandbox/docker_images.py` and `src/sandbox/modal_images.py`
+
+This file should stay aligned with code, not with old branch history.

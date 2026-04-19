@@ -3,11 +3,11 @@ import subprocess
 
 # Maps package_name -> (image_tag, dockerfile_path relative to project root)
 DOCKER_IMAGE_MAP = {
-    "pyod":  ("openad-pyod:latest",  "sandbox/dockerfiles/Dockerfile.pyod"),
-    "pygod": ("openad-pygod:latest", "sandbox/dockerfiles/Dockerfile.pygod"),
-    "darts": ("openad-darts:latest", "sandbox/dockerfiles/Dockerfile.darts"),
-    "tslib": ("openad-tslib:latest", "sandbox/dockerfiles/Dockerfile.tslib"),
-    "tsb_ad": ("openad-tsb-ad:latest", "sandbox/dockerfiles/Dockerfile.tsb_ad"),
+    "pyod":  ("adagent-pyod:latest",  "sandbox/dockerfiles/Dockerfile.pyod"),
+    "pygod": ("adagent-pygod:latest", "sandbox/dockerfiles/Dockerfile.pygod"),
+    "darts": ("adagent-darts:latest", "sandbox/dockerfiles/Dockerfile.darts"),
+    "tslib": ("adagent-tslib:latest", "sandbox/dockerfiles/Dockerfile.tslib"),
+    "tsb_ad": ("adagent-tsb-ad:latest", "sandbox/dockerfiles/Dockerfile.tsb_ad"),
 }
 
 
