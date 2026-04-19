@@ -1,6 +1,6 @@
 # AD-AGENT
 
-**AD-AGENT** is an LLM-driven multi-agent framework for end-to-end anomaly detection. Describe your data in natural language, and AD-AGENT will pick a model, generate the code, validate it, and run it against your dataset — all through a coordinated pipeline of specialized agents.
+**AD-AGENT** is an LLM-driven multi-agent framework for end-to-end anomaly detection. Describe the detection task or workflow you want to run in natural language, and AD-AGENT will pick a model, generate the code, validate it, and produce results — all through a coordinated pipeline of specialized agents.
 
 ![flowchart](./assets/figures/flowchart.jpg)
 
@@ -8,7 +8,21 @@
 
 ## Why AD-AGENT
 
-Running anomaly detection across different data modalities usually means switching libraries, re-learning APIs, and wiring up evaluation code by hand. AD-AGENT collapses that loop: a single prompt like *"Run IForest on cardio.mat"* is turned into a working script, executed in a secure agent environment, and evaluated against your data.
+Running anomaly detection across different data modalities usually means switching libraries, re-learning APIs, and wiring up evaluation code by hand. AD-AGENT collapses that loop: a prompt describing the task you want to solve — *"Run IForest on cardio.mat"*, *"Detect anomalies in my time-series data"*, or *"Try all PyOD models on this dataset"* — is turned into a working script, executed in a secure agent environment, and evaluated end-to-end.
+
+## Citation
+
+If you find AD-AGENT helpful in your research, please cite our paper: [https://arxiv.org/abs/2505.12594](https://arxiv.org/abs/2505.12594)
+
+```bibtex
+@inproceedings{yang2025ad,
+  title={AD-AGENT: A Multi-agent Framework for End-to-end Anomaly Detection},
+  author={Yang, Tiankai and Liu, Junjun and Siu, Michael and Wang, Jiahang and Qian, Zhuangzhuang and Song, Chanjuan and Cheng, Cheng and Hu, Xiyang and Zhao, Yue},
+  booktitle={Proceedings of the 14th International Joint Conference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics},
+  pages={191--205},
+  year={2025}
+}
+```
 
 ## Features
 
@@ -176,20 +190,6 @@ This repository is in active refactor toward a stable, installable library. Curr
 
 - Pipeline generation performance by library, showing success rate, latency, token usage, and cost. ![success_table](./assets/figures/success_table.jpg)
 - Model selection results for PyOD and PyGOD. ![model_selection](./assets/figures/model_selection.jpg)
-
-## Citation
-
-If you find this project helpful, please cite our paper: [https://arxiv.org/abs/2505.12594](https://arxiv.org/abs/2505.12594)
-
-```bibtex
-@inproceedings{yang2025ad,
-  title={AD-AGENT: A Multi-agent Framework for End-to-end Anomaly Detection},
-  author={Yang, Tiankai and Liu, Junjun and Siu, Michael and Wang, Jiahang and Qian, Zhuangzhuang and Song, Chanjuan and Cheng, Cheng and Hu, Xiyang and Zhao, Yue},
-  booktitle={Proceedings of the 14th International Joint Conference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics},
-  pages={191--205},
-  year={2025}
-}
-```
 
 ## Contributors
 
