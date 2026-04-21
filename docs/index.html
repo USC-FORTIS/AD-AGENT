@@ -22,6 +22,7 @@
         <a href="#features">Features</a>
         <a href="#workflow">Workflow</a>
         <a href="#quickstart">Quickstart</a>
+        <a href="#api">API</a>
       </div>
       <a class="btn ghost" href="https://github.com/USC-FORTIS/AD-AGENT" target="_blank" rel="noreferrer">GitHub</a>
     </nav>
@@ -33,7 +34,7 @@
       <h1>End-to-end anomaly detection from one command.</h1>
       <p class="lead">
         AD-AGENT turns natural-language requests into runnable anomaly detection pipelines across
-        PyOD, PyGOD, and time-series libraries, with automated review and evaluation.
+        PyOD, PyGOD, TSLib, TSB-AD, and Darts — with automated review, sandbox execution, and evaluation.
       </p>
       <p class="support-chip">
         Supported by NSF POSE Phase II OpenAD (Award #2346158)
@@ -61,9 +62,13 @@
     <section id="overview" class="panel reveal">
       <h2>What It Does</h2>
       <p>
-        AD-AGENT is a multi-agent framework for anomaly detection lifecycle automation:
-        user intent parsing, model selection, documentation mining, executable code generation,
-        synthetic-data validation, and real-data evaluation.
+        Running anomaly detection across different data modalities usually means switching libraries,
+        re-learning APIs, and wiring up evaluation code by hand. AD-AGENT collapses that loop:
+        a prompt describing the task you want to solve —
+        <em>"Run IForest on cardio.mat"</em>,
+        <em>"Detect anomalies in my time-series data"</em>, or
+        <em>"Try all PyOD models on this dataset"</em> — is turned into a working script,
+        executed inside a secure sandbox, and evaluated end-to-end.
       </p>
     </section>
 
@@ -76,7 +81,7 @@
         </article>
         <article class="card">
           <h3>Cross-library Support</h3>
-          <p>Supports PyOD (tabular), PyGOD (graph), and TSLib/Darts (time-series).</p>
+          <p>Works across <code>pyod</code>, <code>pygod</code>, <code>tslib</code>, <code>tsb_ad</code>, and <code>darts</code> — one interface for tabular, graph, and time-series AD.</p>
         </article>
         <article class="card">
           <h3>Self-checking Pipeline</h3>
@@ -85,6 +90,14 @@
         <article class="card">
           <h3>Metric-driven Output</h3>
           <p>Reports AUROC/AUPRC and failure points for transparent evaluation.</p>
+        </article>
+        <article class="card">
+          <h3>Automatic Model Suggestion</h3>
+          <p>When no algorithm is specified the selector agent recommends competitive candidates based on data modality and shape.</p>
+        </article>
+        <article class="card">
+          <h3>Secure Sandbox Execution</h3>
+          <p>Generated code runs inside an isolated sandbox — Modal (remote, default) or Docker (local) — never on the host process.</p>
         </article>
       </div>
     </section>
@@ -96,7 +109,9 @@
         <li><span>2</span>Selector infers data modality and selects AD library/tools.</li>
         <li><span>3</span>InfoMiner queries authoritative docs and model usage details.</li>
         <li><span>4</span>CodeGenerator creates runnable scripts and revises on errors.</li>
-        <li><span>5</span>Reviewer tests on synthetic data; Evaluator runs on real data.</li>
+        <li><span>5</span>Reviewer tests on synthetic data; re-runs CodeGenerator on failure (up to 4 cycles).</li>
+        <li><span>6</span>Evaluator executes the reviewed code on real data inside the sandbox and records AUROC/AUPRC.</li>
+        <li><span>7</span>Optimizer (optional, <code>-o</code>) tunes hyper-parameters with LLM guidance and re-evaluates.</li>
       </ol>
     </section>
 
@@ -105,19 +120,373 @@
       <pre><code>git clone git@github.com:USC-FORTIS/AD-AGENT.git
 cd AD-AGENT
 python -m venv .venv
+
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows
 .venv\Scripts\activate
+
 pip install -r requirements.txt
+export OPENAI_API_KEY=your-api-key-here   # or set in src/config/config.py
 python main.py</code></pre>
-      <p class="mono">Parallel mode: <code>python main.py -p</code> | Optimizer mode: <code>python main.py -o</code></p>
+      <p style="margin-top:0.8rem;color:var(--muted);">Then type a natural-language request, for example:</p>
+      <pre><code>Run IForest on ./data/pyod_data/cardio.mat
+Run DOMINANT on ./data/pygod_data/books.pt
+Run IForest on ./data/SMAP/SMAP_train.npy
+Run all on ./data/pyod_data/cardio.mat</code></pre>
+      <p class="mono" style="margin-top:0.6rem;">Parallel: <code>python main.py -p</code> &nbsp;|&nbsp; Optimizer: <code>python main.py -o</code> &nbsp;|&nbsp; Sandbox: <code>python main.py --sandbox docker</code></p>
     </section>
+
+    <section id="sandbox" class="panel reveal">
+      <h2>Sandbox Execution</h2>
+      <p>Generated code is never run on the host process. AD-AGENT ships two sandbox backends:</p>
+      <div class="card-grid" style="margin-top:0.8rem;">
+        <article class="card">
+          <h3>Modal <span style="font-size:0.78rem;font-weight:400;color:var(--muted)">(default)</span></h3>
+          <p>Remote execution in an ephemeral cloud container. No local Docker required. Configure with <code>modal setup</code> before first use.</p>
+        </article>
+        <article class="card">
+          <h3>Docker</h3>
+          <p>Local container execution. Requires Docker Desktop to be running. Useful for offline or air-gapped environments.</p>
+        </article>
+      </div>
+      <pre style="margin-top:0.8rem;"><code>python main.py --sandbox modal   # remote (default)
+python main.py --sandbox docker  # local container</code></pre>
+      <p style="margin-top:0.6rem;color:var(--muted);">See <a href="https://github.com/USC-FORTIS/AD-AGENT/blob/main/src/sandbox/README.md" target="_blank" rel="noreferrer">src/sandbox/README.md</a> for Modal setup, data mounting, and debug logging.</p>
+    </section>
+
+    <!-- ═══════════════════════════════ API REFERENCE ═══════════════════════════════ -->
+    <section id="api" class="panel reveal">
+      <h2>API Reference</h2>
+      <p class="api-module-header">api.pipeline module</p>
+      <p class="api-module-desc">
+        Step-by-step pipeline functions for anomaly detection. Each function can be called
+        individually (pass explicit arguments) or inside a graph (pass a <code>FullToolState</code>).
+      </p>
+
+      <!-- FullToolState --------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig"><span class="fn-name">class</span> api.pipeline.<span class="fn-name">FullToolState</span></div>
+        <div class="api-body">
+          <p class="api-bases">Bases: <code>TypedDict</code></p>
+          <p>Shared state dictionary passed between all pipeline nodes.</p>
+          <p class="api-section-label">Attributes</p>
+          <dl class="api-dl">
+            <dt class="api-dt">messages <span class="param-type">Sequence[Any]</span></dt>
+            <dd class="api-dd">Accumulated message history across pipeline stages.</dd>
+            <dt class="api-dt">current_tool <span class="param-type">str</span></dt>
+            <dd class="api-dd">Name of the algorithm currently being processed.</dd>
+            <dt class="api-dt">input_parameters <span class="param-type">dict</span></dt>
+            <dd class="api-dd">User-supplied hyper-parameters for the algorithm.</dd>
+            <dt class="api-dt">data_path_train <span class="param-type">str</span></dt>
+            <dd class="api-dd">Path to the training dataset file.</dd>
+            <dt class="api-dt">data_path_test <span class="param-type">str</span></dt>
+            <dd class="api-dd">Path to the testing dataset file.</dd>
+            <dt class="api-dt">package_name <span class="param-type">str</span></dt>
+            <dd class="api-dd">AD library in use: <code>"pyod"</code>, <code>"pygod"</code>, <code>"tslib"</code>, or <code>"tsb_ad"</code>.</dd>
+            <dt class="api-dt">code_quality <span class="param-type">CodeQuality | None</span></dt>
+            <dd class="api-dd">Evaluation result attached to the current candidate code.</dd>
+            <dt class="api-dt">should_rerun <span class="param-type">bool</span></dt>
+            <dd class="api-dd">Flag indicating whether the code generation step should retry.</dd>
+            <dt class="api-dt">experiment_config <span class="param-type">dict | None</span></dt>
+            <dd class="api-dd">Structured experiment configuration produced by the Processor.</dd>
+            <dt class="api-dt">algorithm_doc <span class="param-type">str | None</span></dt>
+            <dd class="api-dd">Documentation string fetched by the InfoMiner for the current tool.</dd>
+            <dt class="api-dt">feature_dim <span class="param-type">int | None</span></dt>
+            <dd class="api-dd">Feature dimensionality of the dataset, inferred by the Selector.</dd>
+            <dt class="api-dt">metadata <span class="param-type">dict | None</span></dt>
+            <dd class="api-dd">Dataset metadata (e.g. <code>num_samples</code>, <code>has_labels</code>) inferred by the Selector.</dd>
+            <dt class="api-dt">results <span class="param-type">List[Tuple[str, Any]] | None</span></dt>
+            <dd class="api-dd">Collected <code>(tool, final_state)</code> pairs after all tools are processed.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- build_state ----------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">build_state</span>()</div>
+        <div class="api-body">
+          <p>Create a default <code>FullToolState</code> with all agent instances initialised.</p>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Fully initialised pipeline state with default values for every key.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_processor --------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_processor</span>(state=None)</div>
+        <div class="api-body">
+          <p>Launch the interactive chatbot to collect algorithm, dataset, and parameter information from the user and populate <code>experiment_config</code>.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state to reuse. A new default state is created when <code>None</code>.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated pipeline state with <code>experiment_config</code> populated from user input.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_selector ---------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_selector</span>(algorithm=None, dataset_train=None, dataset_test=None, parameters=None, state=None)</div>
+        <div class="api-body">
+          <p>Resolve the AD library and tool list from experiment configuration or explicit arguments. Infers <code>package_name</code>, <code>feature_dim</code>, and dataset metadata.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">algorithm <span class="param-type">list[str], optional</span></dt>
+            <dd class="api-dd">Algorithm names to run. Pass <code>"all"</code> to use every available algorithm for the detected library, or <code>None</code> to let the agent decide.</dd>
+            <dt class="api-dt">dataset_train <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the training dataset. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">dataset_test <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the testing dataset.</dd>
+            <dt class="api-dt">parameters <span class="param-type">dict, optional</span></dt>
+            <dd class="api-dd">Algorithm hyper-parameters to forward to the generator.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state whose <code>experiment_config</code> is used when provided.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with <code>agent_selector</code>, <code>package_name</code>, <code>feature_dim</code>, and <code>metadata</code> set.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_info_miner -------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_info_miner</span>(algorithm=None, package_name=None, state=None)</div>
+        <div class="api-body">
+          <p>Query authoritative documentation for an algorithm and store the result in <code>algorithm_doc</code>. Results are cached to disk to avoid redundant API calls.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">algorithm <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Algorithm name to look up. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">package_name <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Package to query (<code>"pyod"</code>, <code>"pygod"</code>, <code>"tslib"</code>, <code>"tsb_ad"</code>). Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state containing <code>current_tool</code> and <code>package_name</code>.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with <code>algorithm_doc</code> set to the retrieved documentation string.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_code_generator ---------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_code_generator</span>(tool=None, data_path_train=None, algorithm_doc=None, package_name=None, data_path_test=None, input_parameters=None, code_quality=None, metadata=None, state=None)</div>
+        <div class="api-body">
+          <p>Generate an initial runnable script for the algorithm, or revise an existing one when a previous <code>CodeQuality</code> with errors is supplied.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">tool <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Algorithm name. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">data_path_train <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the training dataset. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">algorithm_doc <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Documentation string for the algorithm (from <code>run_info_miner</code>). Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">package_name <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">AD library name. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">data_path_test <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the testing dataset.</dd>
+            <dt class="api-dt">input_parameters <span class="param-type">dict, optional</span></dt>
+            <dd class="api-dd">Hyper-parameters to embed in the generated code.</dd>
+            <dt class="api-dt">code_quality <span class="param-type">CodeQuality, optional</span></dt>
+            <dd class="api-dd">Previous <code>CodeQuality</code> with <code>error_message</code> set, triggering a revision pass instead of fresh generation.</dd>
+            <dt class="api-dt">metadata <span class="param-type">dict, optional</span></dt>
+            <dd class="api-dd">Dataset metadata to pass to the generator for data-shape-aware code.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state. All of the above are read from state when provided.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with <code>code_quality.code</code> containing the generated or revised script.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_reviewer ---------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_reviewer</span>(code_quality=None, tool=None, state=None)</div>
+        <div class="api-body">
+          <p>Execute the generated code against synthetic data to catch runtime errors before real-data evaluation. Updates <code>code_quality.error_message</code> and increments <code>review_count</code> on failure.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">code_quality <span class="param-type">CodeQuality, optional</span></dt>
+            <dd class="api-dd">Code to review. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">tool <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Algorithm name. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with <code>code_quality.error_message</code> set (empty string on success).</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_codegenerator_reviewer_loop --------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_codegenerator_reviewer_loop</span>(tool, data_path_train, algorithm_doc=None, package_name=None, data_path_test=None, input_parameters=None, max_reviews=2)</div>
+        <div class="api-body">
+          <p>Convenience loop that alternates code generation and synthetic review until the code passes or <code>max_reviews</code> is reached.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">tool <span class="param-type">str</span></dt>
+            <dd class="api-dd">Algorithm name.</dd>
+            <dt class="api-dt">data_path_train <span class="param-type">str</span></dt>
+            <dd class="api-dd">Path to the training dataset.</dd>
+            <dt class="api-dt">algorithm_doc <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Documentation string for the algorithm.</dd>
+            <dt class="api-dt">package_name <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">AD library name.</dd>
+            <dt class="api-dt">data_path_test <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the testing dataset.</dd>
+            <dt class="api-dt">input_parameters <span class="param-type">dict, optional</span></dt>
+            <dd class="api-dd">Hyper-parameters to embed in the generated code.</dd>
+            <dt class="api-dt">max_reviews <span class="param-type">int, optional (default=2)</span></dt>
+            <dd class="api-dd">Maximum number of review–revision cycles before exiting the loop.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Final state after the last review cycle, containing <code>code_quality</code>.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_evaluator --------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_evaluator</span>(code_quality=None, tool=None, state=None)</div>
+        <div class="api-body">
+          <p>Execute the reviewed code on real training and testing data inside the configured sandbox and compute AUROC / AUPRC metrics.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">code_quality <span class="param-type">CodeQuality, optional</span></dt>
+            <dd class="api-dd">Code to evaluate. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">tool <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Algorithm name. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with <code>code_quality.auroc</code> and <code>code_quality.auprc</code> populated.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_optimizer --------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_optimizer</span>(code_quality=None, algorithm_doc=None, state=None)</div>
+        <div class="api-body">
+          <p>Use an LLM to propose improved hyper-parameters and re-evaluate. Only active when the <code>-o</code> flag is passed on the command line. Returns the original <code>code_quality</code> unchanged otherwise.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">code_quality <span class="param-type">CodeQuality, optional</span></dt>
+            <dd class="api-dd">Baseline result to optimise. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">algorithm_doc <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Documentation string for the algorithm. Required when <code>state</code> is <code>None</code>.</dd>
+            <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
+            <dd class="api-dd">Existing pipeline state.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Updated state with tuned <code>code_quality</code> after up to 8 optimisation steps.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- run_evaluator_optimizer_loop ----------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">run_evaluator_optimizer_loop</span>(cq, tool, algorithm_doc=None, optimizer_cycles=1)</div>
+        <div class="api-body">
+          <p>Run an initial evaluation pass and then alternate optimizer and evaluator for <code>optimizer_cycles</code> iterations. Exits early if any step returns an error.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">cq <span class="param-type">CodeQuality</span></dt>
+            <dd class="api-dd">Initial code quality object with reviewed code ready for evaluation.</dd>
+            <dt class="api-dt">tool <span class="param-type">str</span></dt>
+            <dd class="api-dd">Algorithm name.</dd>
+            <dt class="api-dt">algorithm_doc <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Documentation string for the algorithm.</dd>
+            <dt class="api-dt">optimizer_cycles <span class="param-type">int, optional (default=1)</span></dt>
+            <dd class="api-dd">Number of optimise-then-evaluate cycles after the initial evaluation.</dd>
+          </dl>
+          <p class="api-section-label">Returns</p>
+          <dl class="api-dl">
+            <dt class="api-dt">state <span class="param-type">dict</span></dt>
+            <dd class="api-dd">Final state with the best <code>code_quality</code> achieved across all cycles.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- check_dataset_exists -------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">check_dataset_exists</span>(dataset_train, dataset_test=None)</div>
+        <div class="api-body">
+          <p>Validate that dataset files exist on disk before the pipeline starts.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">dataset_train <span class="param-type">str</span></dt>
+            <dd class="api-dd">Path to the training dataset.</dd>
+            <dt class="api-dt">dataset_test <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Path to the testing dataset.</dd>
+          </dl>
+          <p class="api-section-label">Raises</p>
+          <dl class="api-dl">
+            <dt class="api-dt">FileNotFoundError</dt>
+            <dd class="api-dd">If either dataset path does not exist on the filesystem.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <!-- log_local ------------------------------------------------------------- -->
+      <div class="api-item">
+        <div class="api-sig">api.pipeline.<span class="fn-name">log_local</span>(stage, message, tool=None)</div>
+        <div class="api-body">
+          <p>Print a formatted stage-tagged log line. Inserts a blank separator line when the stage or tool context changes.</p>
+          <p class="api-section-label">Parameters</p>
+          <dl class="api-dl">
+            <dt class="api-dt">stage <span class="param-type">str</span></dt>
+            <dd class="api-dd">Pipeline stage label, e.g. <code>"code_generator"</code>, <code>"reviewer"</code>.</dd>
+            <dt class="api-dt">message <span class="param-type">str</span></dt>
+            <dd class="api-dd">Log message to print.</dd>
+            <dt class="api-dt">tool <span class="param-type">str, optional</span></dt>
+            <dd class="api-dd">Algorithm/tool name appended to the prefix as <code>[stage][tool]</code>.</dd>
+          </dl>
+        </div>
+      </div>
+
+    </section><!-- /api -->
 
     <section class="panel reveal">
       <h2>Citation</h2>
       <p>If this project helps your work, cite the paper:</p>
-      <pre><code>@article{yang2025ad,
+      <pre><code>@inproceedings{yang2025ad,
   title={AD-AGENT: A Multi-agent Framework for End-to-end Anomaly Detection},
-  author={Yang, Tiankai and Liu, Junjun and ... and Zhao, Yue},
-  journal={arXiv preprint arXiv:2505.12594},
+  author={Yang, Tiankai and Liu, Junjun and Siu, Michael and Wang, Jiahang
+          and Qian, Zhuangzhuang and Song, Chanjuan and Cheng, Cheng
+          and Hu, Xiyang and Zhao, Yue},
+  booktitle={Proceedings of the 14th International Joint Conference on
+             Natural Language Processing and the 4th Conference of the
+             Asia-Pacific Chapter of the Association for Computational Linguistics},
+  pages={191--205},
   year={2025}
 }</code></pre>
     </section>
