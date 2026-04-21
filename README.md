@@ -30,7 +30,8 @@ If you find AD-AGENT helpful in your research, please cite our paper: [https://a
 
 - **Natural-language workflow generation.** Go from a sentence to a runnable anomaly detection script.
 - **Multi-agent orchestration.** Decoupled agents handle model selection, documentation lookup, code generation, review, and evaluation.
-- **Cross-library support.** Works across `pyod`, `pygod`, `darts`, `tslib`, and `tsb_ad`, so one interface covers tabular, graph, and time-series anomaly detection.
+- **Cross-library support.** Works across `pyod` (tabular), `pygod` (graph), and `tsb_ad` (time-series).
+- **Pipeline API.** Call `api.pipeline` stages directly from Python to embed AD-AGENT in notebooks, scripts, or larger workflows.
 - **Automatic model suggestion.** When no algorithm is specified, the selector agent recommends competitive candidates based on the data and task.
 - **Secure agent execution.** Generated code runs inside an isolated sandbox environment rather than the host process. See [src/sandbox/README.md](./src/sandbox/README.md) for details.
 
@@ -95,6 +96,7 @@ Additional modes:
 ```bash
 python main.py -p    # parallel execution across tools
 python main.py -o    # optimizer mode
+python main.py --sandbox docker
 ```
 
 ## Sandbox Execution
