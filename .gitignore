@@ -177,11 +177,15 @@ cython_debug/
 .env
 
 
+# Data files (too large for git)
+data/
+
 # Ignore generated files
+/runtime
 /generated_scripts
-train_data_loader.py
-test_data_loader.py
+/Time-Series-Library
 cache.json
 cache.json.lock
-head_train_data_loader.py
-head_test_data_loader.py
+/config/config.py
+/dataset
+/data

@@ -1,0 +1,6 @@
+FROM python:3.10-slim
+RUN pip install --no-cache-dir torch numpy && \
+    TORCH=$(python -c "import torch; v=torch.__version__.split('+')[0].split('.'); print(f'{v[0]}.{v[1]}.0')") && \
+    pip install --no-cache-dir pyg_lib torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-${TORCH}+cpu.html && \
+    pip install --no-cache-dir torch-geometric pygod
+WORKDIR /workspace
