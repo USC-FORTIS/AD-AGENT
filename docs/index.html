@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AD-AGENT | Multi-Agent Anomaly Detection</title>
-  <meta name="description" content="AD-AGENT is an LLM-driven multi-agent anomaly detection platform for end-to-end workflows across tabular, graph, and time-series data." />
+  <meta name="description" content="AD-AGENT is an LLM-driven multi-agent anomaly detection platform for end-to-end anomaly detection workflows across tabular and graph data." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Poppins:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -22,6 +22,7 @@
         <a href="#features">Features</a>
         <a href="#workflow">Workflow</a>
         <a href="#quickstart">Quickstart</a>
+        <a href="#sandbox">Sandbox</a>
         <a href="#api">API</a>
       </div>
       <a class="btn ghost" href="https://github.com/USC-FORTIS/AD-AGENT" target="_blank" rel="noreferrer">GitHub</a>
@@ -34,7 +35,7 @@
       <h1>End-to-end anomaly detection from one command.</h1>
       <p class="lead">
         AD-AGENT turns natural-language requests into runnable anomaly detection pipelines across
-        PyOD, PyGOD, TSLib, TSB-AD, and Darts — with automated review, sandbox execution, and evaluation.
+        PyOD, PyGOD, and TSB-AD — with automated review, sandbox execution, and evaluation.
       </p>
       <p class="support-chip">
         Supported by NSF POSE Phase II OpenAD (Award #2346158)
@@ -46,7 +47,7 @@
       <div class="stat-grid">
         <article>
           <h3>3 modalities</h3>
-          <p>Tabular, graph, and time series</p>
+          <p>Tabular, graph, and time-series anomaly detection</p>
         </article>
         <article>
           <h3>Multi-agent</h3>
@@ -66,7 +67,7 @@
         re-learning APIs, and wiring up evaluation code by hand. AD-AGENT collapses that loop:
         a prompt describing the task you want to solve —
         <em>"Run IForest on cardio.mat"</em>,
-        <em>"Detect anomalies in my time-series data"</em>, or
+        <em>"Detect anomalies in my graph data"</em>, or
         <em>"Try all PyOD models on this dataset"</em> — is turned into a working script,
         executed inside a secure sandbox, and evaluated end-to-end.
       </p>
@@ -81,7 +82,7 @@
         </article>
         <article class="card">
           <h3>Cross-library Support</h3>
-          <p>Works across <code>pyod</code>, <code>pygod</code>, <code>tslib</code>, <code>tsb_ad</code>, and <code>darts</code> — one interface for tabular, graph, and time-series AD.</p>
+          <p>Works across <code>pyod</code> (tabular), <code>pygod</code> (graph), and <code>tsb_ad</code> (time-series) — one interface for multiple data modalities.</p>
         </article>
         <article class="card">
           <h3>Self-checking Pipeline</h3>
@@ -140,20 +141,69 @@ Run all on ./data/pyod_data/cardio.mat</code></pre>
 
     <section id="sandbox" class="panel reveal">
       <h2>Sandbox Execution</h2>
-      <p>Generated code is never run on the host process. AD-AGENT ships two sandbox backends:</p>
-      <div class="card-grid" style="margin-top:0.8rem;">
+      <p>
+        AD-AGENT runs its agent workflow on the host machine and executes generated model scripts
+        inside an isolated sandbox backend. This keeps the orchestration layer lightweight while
+        moving package-heavy model execution into containers. Workflow logs
+        (<code>[main]</code>, <code>[selector]</code>, <code>[reviewer]</code> …) come from the
+        host; generated-script output is streamed back from the sandbox into the same terminal.
+      </p>
+
+      <div class="card-grid" style="margin-top:0.9rem;">
         <article class="card">
           <h3>Modal <span style="font-size:0.78rem;font-weight:400;color:var(--muted)">(default)</span></h3>
-          <p>Remote execution in an ephemeral cloud container. No local Docker required. Configure with <code>modal setup</code> before first use.</p>
+          <p>Remote execution in a managed cloud sandbox. No local Docker required.</p>
+          <p style="margin-top:0.5rem;">Prerequisite — install and authenticate once:</p>
+          <pre style="margin-top:0.4rem;font-size:0.82rem;"><code>pip install modal
+modal setup</code></pre>
+          <p style="margin-top:0.5rem;">Paths inside Modal: <code>/workspace</code> (script), <code>/data</code> (datasets).</p>
         </article>
         <article class="card">
           <h3>Docker</h3>
           <p>Local container execution. Requires Docker Desktop to be running. Useful for offline or air-gapped environments.</p>
+          <p style="margin-top:0.5rem;">Resource limits applied to every container:</p>
+          <pre style="margin-top:0.4rem;font-size:0.82rem;"><code>--memory=4g  --cpus=2  --rm</code></pre>
+          <p style="margin-top:0.5rem;">Dataset files are bind-mounted read-only at the requested in-container paths.</p>
         </article>
       </div>
-      <pre style="margin-top:0.8rem;"><code>python main.py --sandbox modal   # remote (default)
-python main.py --sandbox docker  # local container</code></pre>
-      <p style="margin-top:0.6rem;color:var(--muted);">See <a href="https://github.com/USC-FORTIS/AD-AGENT/blob/main/src/sandbox/README.md" target="_blank" rel="noreferrer">src/sandbox/README.md</a> for Modal setup, data mounting, and debug logging.</p>
+
+      <h3 style="margin:1.2rem 0 0.4rem;font-family:'Poppins',sans-serif;font-size:1rem;">Quick Start</h3>
+      <pre><code>python main.py --sandbox docker
+python main.py --sandbox modal
+
+# with debug retention (Modal only — sandboxes kept for post-run inspection)
+ADAGENT_SANDBOX_DEBUG=1 python main.py --sandbox modal</code></pre>
+
+      <h3 style="margin:1.1rem 0 0.4rem;font-family:'Poppins',sans-serif;font-size:1rem;">Configuration</h3>
+      <p style="color:var(--muted);">Sandbox mode is resolved in this priority order:</p>
+      <ol class="flow" style="margin-top:0.5rem;">
+        <li><span>1</span><code>--sandbox</code> flag passed to <code>main.py</code></li>
+        <li><span>2</span>Environment variable <code>ADAGENT_SANDBOX</code></li>
+        <li><span>3</span>Legacy <code>OPENAD_SANDBOX</code> (backward compatibility)</li>
+        <li><span>4</span><code>src/config/settings.yaml</code> if present</li>
+        <li><span>5</span>Default: <code>modal</code></li>
+      </ol>
+      <p style="margin-top:0.8rem;color:var(--muted);">Additional environment variables:</p>
+      <pre><code>ADAGENT_SANDBOX_DEBUG=1        # retain Modal sandboxes after run for inspection
+ADAGENT_MODAL_APP_NAME=...     # override Modal app name  (default: adagent-sandbox)
+ADAGENT_MODAL_VOLUME_NAME=...  # override Modal volume name (default: adagent-data)</code></pre>
+
+      <h3 style="margin:1.1rem 0 0.4rem;font-family:'Poppins',sans-serif;font-size:1rem;">Supported Package Images</h3>
+      <div class="card-grid">
+        <article class="card">
+          <h3 style="font-size:0.95rem;">Docker image tags</h3>
+          <pre style="margin-top:0.5rem;font-size:0.82rem;"><code>adagent-pyod:latest
+adagent-pygod:latest
+adagent-tsb-ad:latest</code></pre>
+        </article>
+        <article class="card">
+          <h3 style="font-size:0.95rem;">Modal image definitions</h3>
+          <pre style="margin-top:0.5rem;font-size:0.82rem;"><code>PYOD_IMAGE
+PYGOD_IMAGE
+TSB_AD_IMAGE</code></pre>
+          <p style="margin-top:0.5rem;font-size:0.88rem;"><code>pygod</code> requires PyG wheel deps (<code>pyg_lib</code>, <code>torch_sparse</code>, <code>torch_scatter</code>).</p>
+        </article>
+      </div>
     </section>
 
     <!-- ═══════════════════════════════ API REFERENCE ═══════════════════════════════ -->
@@ -184,7 +234,7 @@ python main.py --sandbox docker  # local container</code></pre>
             <dt class="api-dt">data_path_test <span class="param-type">str</span></dt>
             <dd class="api-dd">Path to the testing dataset file.</dd>
             <dt class="api-dt">package_name <span class="param-type">str</span></dt>
-            <dd class="api-dd">AD library in use: <code>"pyod"</code>, <code>"pygod"</code>, <code>"tslib"</code>, or <code>"tsb_ad"</code>.</dd>
+            <dd class="api-dd">AD library in use: <code>"pyod"</code>, <code>"pygod"</code>, or <code>"tsb_ad"</code>.</dd>
             <dt class="api-dt">code_quality <span class="param-type">CodeQuality | None</span></dt>
             <dd class="api-dd">Evaluation result attached to the current candidate code.</dd>
             <dt class="api-dt">should_rerun <span class="param-type">bool</span></dt>
@@ -270,7 +320,7 @@ python main.py --sandbox docker  # local container</code></pre>
             <dt class="api-dt">algorithm <span class="param-type">str, optional</span></dt>
             <dd class="api-dd">Algorithm name to look up. Required when <code>state</code> is <code>None</code>.</dd>
             <dt class="api-dt">package_name <span class="param-type">str, optional</span></dt>
-            <dd class="api-dd">Package to query (<code>"pyod"</code>, <code>"pygod"</code>, <code>"tslib"</code>, <code>"tsb_ad"</code>). Required when <code>state</code> is <code>None</code>.</dd>
+            <dd class="api-dd">Package to query (<code>"pyod"</code>, <code>"pygod"</code>, <code>"tsb_ad"</code>). Required when <code>state</code> is <code>None</code>.</dd>
             <dt class="api-dt">state <span class="param-type">FullToolState, optional</span></dt>
             <dd class="api-dd">Existing pipeline state containing <code>current_tool</code> and <code>package_name</code>.</dd>
           </dl>
