@@ -130,22 +130,6 @@ class TestAgentInfoMiner(unittest.TestCase):
         self.assertEqual(pyod_doc, "pyod_doc")
         self.assertEqual(pygod_doc, "pygod_doc")
 
-    def test_query_docs_tslib_uses_prompt_lookup(self):
-        agent = AgentInfoMiner()
-        with tempfile.TemporaryDirectory() as td:
-            cache_path = os.path.join(td, "cache.json")
-            with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump({}, f)
-            fake_client = types.SimpleNamespace(
-                responses=types.SimpleNamespace(
-                    create=lambda **kwargs: types.SimpleNamespace(output_text="tslib_doc")
-                )
-            )
-            with patch.object(agent_info_miner_mod, "OpenAI", return_value=fake_client):
-                doc = agent.query_docs("LightTS", "tslib", cache_path=cache_path)
-
-        self.assertEqual(doc, "tslib_doc")
-
     def test_tsb_ad_prompt_formats_with_algorithm_name(self):
         rendered = agent_info_miner_mod.web_search_prompt_tsb_ad.invoke(
             {"algorithm_name": "IForest"}
@@ -176,7 +160,7 @@ class TestAgentInfoMiner(unittest.TestCase):
         rendered = agent_reviewer_mod.test_prompt.invoke(
             {
                 "code": "np.load('./data/MSL_train.npy')",
-                "package_name": "tslib",
+                "package_name": "tsbad",
                 "train_dataset": "./data/MSL_train.npy",
                 "dataset_metadata": "{}",
                 "feature_dim": 55,
