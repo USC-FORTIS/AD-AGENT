@@ -198,7 +198,8 @@ This repository is in active refactor toward a stable, installable library. Curr
 ## Contributors
 
 <a href="https://github.com/USC-FORTIS/AD-AGENT/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=USC-FORTIS/AD-AGENT" />
+  <img src="https://contrib.rocks/image?repo=USC-FORTIS/AD-AGENT&v=1" />
 </a>
+
 
 Made with [contrib.rocks](https://contrib.rocks).
